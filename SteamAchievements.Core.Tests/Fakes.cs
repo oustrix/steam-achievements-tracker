@@ -1,4 +1,6 @@
 using SteamAchievements.Core.Abstractions;
+using SteamAchievements.Core.Data;
+using SteamAchievements.Core.Presentation;
 
 namespace SteamAchievements.Core.Tests;
 
@@ -62,4 +64,54 @@ public sealed class TempSteamRoot : IDisposable
             Directory.Delete(Path, recursive: true);
         }
     }
+}
+
+/// <summary>
+/// An <see cref="ISyncPresenter"/> whose state a test drives directly.
+/// <see cref="Publish"/> is the whole point: it sets the status and raises the
+/// event in one call, the way SyncCoordinator does.
+/// </summary>
+public sealed class FakeSyncPresenter : ISyncPresenter
+{
+    public SyncStatusView Status { get; private set; } = SyncStatusView.Idle;
+
+    public event Action? Changed;
+
+    public void Publish(SyncStatusView status)
+    {
+        Status = status;
+        Changed?.Invoke();
+    }
+}
+
+/// <summary>
+/// An <see cref="IAccountAdmin"/> that records what it was asked to do and
+/// raises <see cref="Changed"/> on demand.
+/// </summary>
+public sealed class FakeAccountAdmin : IAccountAdmin
+{
+    public StoredAccount? Current { get; set; }
+
+    public AccountMismatch? Mismatch { get; set; }
+
+    public ulong? SwitchedTo { get; private set; }
+
+    public int Resets { get; private set; }
+
+    public event Action? Changed;
+
+    public Task SwitchToAsync(ulong steamId64, CancellationToken cancellationToken)
+    {
+        SwitchedTo = steamId64;
+        Raise();
+        return Task.CompletedTask;
+    }
+
+    public void ResetEverything()
+    {
+        Resets++;
+        Raise();
+    }
+
+    public void Raise() => Changed?.Invoke();
 }
