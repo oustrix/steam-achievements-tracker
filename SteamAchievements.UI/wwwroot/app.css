@@ -24,10 +24,12 @@
     --border: #2b2833;
     --border-strong: #3a3444;
     --border-hover: #544c60;
+    --border-selected: #4a4256;
 
     --text: #edeae3;
     --text-secondary: #c6bfb4;
     --text-muted: #9c968c;
+    --text-faded: #8d8579;
     --text-dim: #6f6a63;
     --text-faint: #57515e;
 

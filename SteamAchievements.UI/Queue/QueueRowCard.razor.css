@@ -11,7 +11,7 @@
     transition: background 120ms, border-color 120ms;
 }
 
-.row.selected { background: var(--bg-selected); border-color: var(--border-hover); }
+.row.selected { background: var(--bg-selected); border-color: var(--border-selected); }
 .row.done { opacity: 0.6; }
 
 .cover-slot { height: 96px; }
@@ -31,7 +31,7 @@
 
 .counts { font-size: 11px; color: var(--text-dim); flex: none; }
 .reason { font-size: 13px; color: var(--text-secondary); }
-.row.done .reason { color: var(--text-muted); }
+.row.done .reason { color: var(--text-faded); }
 
 .effort {
     display: flex;
