@@ -128,6 +128,12 @@ public static class Database
         // already exists, so anything added to an existing table after the
         // first release needs this path.
         EnsureColumn(connection, "settings", "accent", "TEXT");
+
+        // Set when Steam rejects the key, cleared when a key is accepted or a
+        // sync succeeds. Persisted rather than held in memory: otherwise a
+        // restart makes the application look healthy and the user spends
+        // requests rediscovering what was already known.
+        EnsureColumn(connection, "settings", "key_rejected_at", "TEXT");
     }
 
     /// <summary>
