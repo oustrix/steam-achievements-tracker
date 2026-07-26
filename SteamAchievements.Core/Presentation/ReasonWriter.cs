@@ -48,7 +48,7 @@ public static class ReasonWriter
 
         if (unknown > 0)
         {
-            return $"{head}, rarity unknown for {Formatting.Number(unknown)} of them";
+            return $"{head}, rarity unknown for {Formatting.Count(unknown)} of them";
         }
 
         var rare = locked.Where(a => a.GlobalPercent!.Value < RareThreshold).ToList();

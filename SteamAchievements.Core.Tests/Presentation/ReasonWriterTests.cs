@@ -44,11 +44,21 @@ public class ReasonWriterTests
     [Fact]
     public void CountsHowManyLackRarityWhenOnlySomeDo()
     {
+        // The design mockup writes "rarity unknown for 6 of them" but the rule is
+        // consistent: counts inside clauses use words up to nine, digits from ten.
+        // The mockup is hand-written prose and inconsistent with other similar lines.
         var achievements = Enumerable.Range(0, 33).Select(_ => Locked(20.0))
             .Concat(Enumerable.Range(0, 6).Select(_ => Locked(null)))
             .ToList();
 
-        Assert.Equal("39 left, rarity unknown for 6 of them", ReasonWriter.Write(achievements));
+        Assert.Equal("39 left, rarity unknown for six of them", ReasonWriter.Write(achievements));
+
+        // The rule switches to digits above nine
+        var manyUnknown = Enumerable.Range(0, 4).Select(_ => Locked(20.0))
+            .Concat(Enumerable.Range(0, 41).Select(_ => Locked(null)))
+            .ToList();
+
+        Assert.Equal("45 left, rarity unknown for 41 of them", ReasonWriter.Write(manyUnknown));
     }
 
     [Fact]
