@@ -6,13 +6,18 @@
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
 
-
-  <ItemGroup>
-    <SupportedPlatform Include="browser" />
-  </ItemGroup>
+  <!--
+    No <SupportedPlatform Include="browser" />. This library is hosted by
+    BlazorWebView, not WebAssembly, and that marker only points the
+    platform-compatibility analyzer at Core's SQLite dependency for no gain.
+  -->
 
   <ItemGroup>
     <PackageReference Include="Microsoft.AspNetCore.Components.Web" Version="10.0.10" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\SteamAchievements.Core\SteamAchievements.Core.csproj" />
   </ItemGroup>
 
 </Project>

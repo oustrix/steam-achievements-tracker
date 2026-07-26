@@ -1,0 +1,89 @@
+/*
+  Design tokens, taken from docs/design/steam-achievements-tracker.dc.html.
+  Everything beyond this file lives in per-component isolated CSS. The mockup
+  styles inline because it is a single-file prototype; carrying that into
+  Razor would throw away the one mechanism that keeps styles from drifting.
+*/
+
+@import url("./fonts/fonts.css");
+
+:root {
+    --sans: "Instrument Sans", Helvetica, Arial, sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+
+    --bg-page: #0e0d10;
+    --bg-shell: #141317;
+    --bg-sidebar: #121115;
+    --bg-card: #18171c;
+    --bg-raised: #1b1a20;
+    --bg-selected: #1f1d26;
+    --bg-active: #211f28;
+
+    --border-hairline: #201e26;
+    --border-subtle: #232028;
+    --border: #2b2833;
+    --border-strong: #3a3444;
+    --border-hover: #544c60;
+
+    --text: #edeae3;
+    --text-secondary: #c6bfb4;
+    --text-muted: #9c968c;
+    --text-dim: #6f6a63;
+    --text-faint: #57515e;
+
+    /* Overridden on the shell root by the accent picker. */
+    --accent: #e0a355;
+    --accent-hover: #f0bd7c;
+    --accent-dim: #7a6a52;
+    --on-accent: #1a1509;
+
+    --warn-bg: #211a12;
+    --warn-border: #4a3b26;
+    --warn-text: #f0bd7c;
+    --warn-button: #2c2317;
+
+    --danger-bg: #1f1517;
+    --danger-border: #4a2626;
+    --danger-text: #e89898;
+    --danger-button: #2a191b;
+    --danger-button-border: #6b3232;
+
+    --track: #282531;
+    --bar-complete: #4c4650;
+    --dot-off: #3d3844;
+
+    --placeholder: repeating-linear-gradient(135deg, #2b2833 0 6px, #232028 6px 12px);
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+    margin: 0;
+    padding: 0;
+    height: 100%;
+    background: var(--bg-page);
+    color: var(--text);
+    font-family: var(--sans);
+    font-size: 14px;
+    -webkit-font-smoothing: antialiased;
+}
+
+a { color: var(--accent); text-decoration: none; }
+a:hover { color: var(--accent-hover); }
+
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-thumb { background: #34303a; border-radius: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+
+/* Uppercase micro-labels: "EFFORT", "HISTORY", "REMAINING EFFORT". */
+.micro {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+}
+
+/* Every number, identifier and timestamp. The split between this and the
+   sans face is what makes counts read as data rather than as copy. */
+.num { font-family: var(--mono); }
