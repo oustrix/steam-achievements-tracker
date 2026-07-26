@@ -73,7 +73,7 @@ public class LoginUsersReaderTests
     }
 
     [Fact]
-    public void HandlesOutOfRangeTimestampGracefully()
+    public void ClampsOutOfRangeTimestampToMinValue()
     {
         var accounts = LoginUsersReader.Read("""
             "users"
@@ -83,7 +83,7 @@ public class LoginUsersReaderTests
                     "AccountName"		"bad_timestamp"
                     "PersonaName"		"Bad"
                     "MostRecent"		"0"
-                    "Timestamp"		"99999999999999999999"
+                    "Timestamp"		"99999999999999"
                 }
                 "76561190000000002"
                 {
@@ -95,8 +95,9 @@ public class LoginUsersReaderTests
             }
             """);
 
-        Assert.Equal(1, accounts.Count);
-        Assert.Equal(76561190000000002u, accounts[0].SteamId64);
+        Assert.Equal(2, accounts.Count);
+        var badEntry = accounts.First(a => a.SteamId64 == 76561190000000001);
+        Assert.Equal(DateTimeOffset.MinValue, badEntry.Timestamp);
     }
 
     [Fact]
@@ -123,5 +124,33 @@ public class LoginUsersReaderTests
             """);
 
         Assert.Equal(76561190000000002u, LoginUsersReader.SelectActive(accounts)!.SteamId64);
+    }
+
+    [Fact]
+    public void SelectsFlaggedAccountWithCorruptedTimestampOverValidOlderAccount()
+    {
+        var accounts = LoginUsersReader.Read("""
+            "users"
+            {
+                "76561190000000001"
+                {
+                    "AccountName"		"flagged"
+                    "PersonaName"		"Flagged"
+                    "MostRecent"		"1"
+                    "Timestamp"		"99999999999999"
+                }
+                "76561190000000002"
+                {
+                    "AccountName"		"valid"
+                    "PersonaName"		"Valid"
+                    "MostRecent"		"0"
+                    "Timestamp"		"1000"
+                }
+            }
+            """);
+
+        var active = LoginUsersReader.SelectActive(accounts);
+        Assert.NotNull(active);
+        Assert.Equal(76561190000000001u, active!.SteamId64);
     }
 }

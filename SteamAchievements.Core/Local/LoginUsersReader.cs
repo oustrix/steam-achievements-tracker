@@ -14,26 +14,31 @@ public static class LoginUsersReader
                 continue;
             }
 
-            if (!long.TryParse(node["Timestamp"].Value, out var timestamp))
+            DateTimeOffset timestamp;
+            if (long.TryParse(node["Timestamp"].Value, out var timestampSeconds))
             {
-                // Skip entries with unparseable timestamps
-                continue;
+                try
+                {
+                    timestamp = DateTimeOffset.FromUnixTimeSeconds(timestampSeconds);
+                }
+                catch (ArgumentOutOfRangeException)
+                {
+                    // Clamp out-of-range timestamps to MinValue (sentinel for "unknown")
+                    timestamp = DateTimeOffset.MinValue;
+                }
+            }
+            else
+            {
+                // Clamp unparseable timestamps to MinValue (sentinel for "unknown")
+                timestamp = DateTimeOffset.MinValue;
             }
 
-            try
-            {
-                accounts.Add(new SteamAccount(
-                    steamId,
-                    node["AccountName"].Value ?? string.Empty,
-                    node["PersonaName"].Value ?? string.Empty,
-                    node["MostRecent"].Value == "1",
-                    DateTimeOffset.FromUnixTimeSeconds(timestamp)));
-            }
-            catch (ArgumentOutOfRangeException)
-            {
-                // Skip entries with timestamps that cannot be converted to DateTimeOffset
-                continue;
-            }
+            accounts.Add(new SteamAccount(
+                steamId,
+                node["AccountName"].Value ?? string.Empty,
+                node["PersonaName"].Value ?? string.Empty,
+                node["MostRecent"].Value == "1",
+                timestamp));
         }
 
         return accounts;
