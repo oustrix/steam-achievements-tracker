@@ -1,10 +1,11 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk.Razor">
 
-  <ItemGroup>
-    <ProjectReference Include="..\SteamAchievements.Core\SteamAchievements.Core.csproj" />
-    <ProjectReference Include="..\SteamAchievements.UI\SteamAchievements.UI.csproj" />
-  </ItemGroup>
-
+  <!--
+    Microsoft.NET.Sdk.Razor, not Microsoft.NET.Sdk: this project contains
+    .razor components (Components/Routes.razor) that the plain SDK does not
+    compile. UseWPF still applies; this is the combination the official
+    WPF + Blazor template uses.
+  -->
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <TargetFramework>net10.0-windows</TargetFramework>
@@ -12,5 +13,41 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWPF>true</UseWPF>
   </PropertyGroup>
+
+  <PropertyGroup>
+    <!--
+      BlazorWebView serves wwwroot/index.html and the RCL's _content assets from
+      disk. PublishSingleFile bundles assemblies and, with
+      IncludeNativeLibrariesForSelfExtract, native libraries — but not content.
+      Without this the publish output is an exe plus a wwwroot tree.
+    -->
+    <IncludeAllContentForSelfExtract>true</IncludeAllContentForSelfExtract>
+
+    <!--
+      Microsoft.Web.WebView2's Common.targets adds WebView2Loader.dll as a
+      Content item linked into runtimes\win-x64\native\, separately from the RID
+      asset PublishSingleFile already bundles. That copy would land loose in a
+      subdirectory. This property is the package's own documented opt-out.
+    -->
+    <WebView2NeverCopyLoaderDllToOutputDirectory>true</WebView2NeverCopyLoaderDllToOutputDirectory>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Components.WebView.Wpf" Version="10.0.90" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.10" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\SteamAchievements.Core\SteamAchievements.Core.csproj" />
+    <ProjectReference Include="..\SteamAchievements.UI\SteamAchievements.UI.csproj" />
+  </ItemGroup>
+
+  <!--
+    A non-Web SDK does not treat wwwroot as content automatically, so the host
+    page would never reach the output directory.
+  -->
+  <ItemGroup>
+    <Content Include="wwwroot\**\*" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
 
 </Project>
