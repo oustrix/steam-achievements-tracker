@@ -27,8 +27,13 @@ public sealed class GameRepository
 
     public GameRepository(SqliteConnection connection) => _connection = connection;
 
-    /// <summary>Exposed so tests can assert with raw SQL.</summary>
-    public SqliteConnection Connection => _connection;
+    /// <summary>
+    /// Exposed so tests can assert with raw SQL. Deliberately internal: this
+    /// class guarantees serialized access to the connection, and a public
+    /// handle would let any caller bypass that guarantee — which is exactly
+    /// the race the lock above exists to prevent.
+    /// </summary>
+    internal SqliteConnection Connection => _connection;
 
     // Every timestamp column is stored as ISO-8601 round-trip ("o") text so
     // it sorts lexicographically and survives a DateTimeOffset round-trip
