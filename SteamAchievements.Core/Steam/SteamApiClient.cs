@@ -1,5 +1,6 @@
 using System.Net;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace SteamAchievements.Core.Steam;
 
@@ -8,6 +9,13 @@ public sealed class SteamApiClient
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNameCaseInsensitive = true,
+
+        // Steam quotes some numbers and not others: achievement rarity arrives
+        // as {"percent":"70.5"} while unlocktime and achieved arrive as bare
+        // integers. Without this, deserializing global percentages throws and
+        // every game loses its rarity data — verified against the live API on
+        // 2026-07-26, after synthetic fixtures had hidden it.
+        NumberHandling = JsonNumberHandling.AllowReadingFromString,
     };
 
     private readonly HttpClient _http;
@@ -170,12 +178,18 @@ public sealed class SteamApiClient
                     ?? throw new SteamApiException(SteamApiErrorKind.Unknown, (int)response.StatusCode,
                         "Steam returned an empty document.");
             }
-            catch (JsonException)
+            catch (JsonException e)
             {
-                // A 200 with a non-JSON body means Steam served an error or an
-                // interstitial page. Never surface a raw JsonException.
+                // A 200 that will not deserialize means either a non-JSON body
+                // (an error or interstitial page) or JSON whose shape differs
+                // from what we expect. Never surface a raw JsonException — but
+                // do carry the parser's own message, which names the offending
+                // path. Without it, a single mistyped field reads as "Steam is
+                // broken" and costs an hour; with it, the fix is obvious.
+                // The exception message is safe to include: it describes the
+                // RESPONSE, never the request URL that carries the API key.
                 throw new SteamApiException(SteamApiErrorKind.Unknown, (int)response.StatusCode,
-                    "Steam returned a non-JSON response.");
+                    $"Steam returned a response this client could not parse: {e.Message}");
             }
         }
     }

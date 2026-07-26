@@ -85,7 +85,11 @@ public class SteamApiEndpointTests
         var url = handler.Requests.Single().ToString();
         Assert.Contains("gameid=292030", url);       // NOT appid — the only endpoint that differs
         Assert.DoesNotContain("key=", url);          // this endpoint needs no key
-        Assert.Equal(62.4, percentages["ACH_1"], 1);
+
+        // The fixture carries Steam's real wire format, where percent is a
+        // QUOTED string. A synthetic fixture using bare numbers hid this and
+        // let a live sync lose rarity data for every game in the library.
+        Assert.Equal(70.5, percentages["ACH_1"], 1);
         Assert.Equal(0.4, percentages["ACH_2"], 1);
     }
 

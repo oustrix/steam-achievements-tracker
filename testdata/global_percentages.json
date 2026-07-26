@@ -1,8 +1,14 @@
 {
   "achievementpercentages": {
     "achievements": [
-      { "name": "ACH_1", "percent": 62.4000015258789 },
-      { "name": "ACH_2", "percent": 0.400000005960464 }
+      {
+        "name": "ACH_1",
+        "percent": "70.5"
+      },
+      {
+        "name": "ACH_2",
+        "percent": "0.4"
+      }
     ]
   }
 }
