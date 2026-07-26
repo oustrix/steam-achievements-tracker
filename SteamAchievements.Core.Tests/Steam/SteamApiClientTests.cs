@@ -79,4 +79,42 @@ public class SteamApiClientTests
         Assert.DoesNotContain("TESTKEY", error.Message);
         Assert.DoesNotContain("TESTKEY", error.ToString());
     }
+
+    [Fact]
+    public async Task ClassifiesTransportFailureAsTransientServerError()
+    {
+        var handler = new FakeHttpMessageHandler(_ => throw new HttpRequestException("Connection refused"));
+        var client = Client(handler);
+
+        var error = await Assert.ThrowsAsync<SteamApiException>(
+            () => client.GetOwnedGamesAsync(76561190000000002, CancellationToken.None));
+
+        Assert.Equal(SteamApiErrorKind.ServerError, error.Kind);
+        Assert.True(error.IsTransient);
+    }
+
+    [Fact]
+    public async Task PropagatesGenuineCancellationWithoutWrapping()
+    {
+        var client = Client(FakeHttpMessageHandler.Returning(HttpStatusCode.OK, "{}"));
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            () => client.GetOwnedGamesAsync(76561190000000002, cts.Token));
+    }
+
+    [Fact]
+    public async Task DoesNotClassifyNoStatsBodyOutsideBadRequestAsNoStatsForApp()
+    {
+        var client = Client(FakeHttpMessageHandler.Returning(
+            HttpStatusCode.TooManyRequests,
+            "<html><body>Requested app has no stats</body></html>",
+            "text/html"));
+
+        var error = await Assert.ThrowsAsync<SteamApiException>(
+            () => client.GetPlayerAchievementsAsync(76561190000000002, 220, CancellationToken.None));
+
+        Assert.Equal(SteamApiErrorKind.RateLimited, error.Kind);
+    }
 }

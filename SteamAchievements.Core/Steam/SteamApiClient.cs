@@ -47,26 +47,54 @@ public sealed class SteamApiClient
 
     internal async Task<T> GetJsonAsync<T>(string path, CancellationToken cancellationToken)
     {
-        using var response = await _http.GetAsync(path, cancellationToken);
-        var body = await response.Content.ReadAsStringAsync(cancellationToken);
-
-        if (!response.IsSuccessStatusCode)
-        {
-            throw Classify(response.StatusCode, body);
-        }
-
+        HttpResponseMessage response;
         try
         {
-            return JsonSerializer.Deserialize<T>(body, JsonOptions)
-                ?? throw new SteamApiException(SteamApiErrorKind.Unknown, (int)response.StatusCode,
-                    "Steam returned an empty document.");
+            response = await _http.GetAsync(path, cancellationToken);
         }
-        catch (JsonException)
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
-            // A 200 with a non-JSON body means Steam served an error or an
-            // interstitial page. Never surface a raw JsonException.
-            throw new SteamApiException(SteamApiErrorKind.Unknown, (int)response.StatusCode,
-                "Steam returned a non-JSON response.");
+            // The caller cancelled — this is not a transport failure, so let it
+            // propagate as-is. The sync layer relies on cancellation working.
+            throw;
+        }
+        catch (HttpRequestException)
+        {
+            // Connection refused, DNS failure, TLS error, etc. Never echo the
+            // request URL here — it carries the API key.
+            throw new SteamApiException(SteamApiErrorKind.ServerError, 0,
+                "A network error occurred while contacting Steam.");
+        }
+        catch (TaskCanceledException)
+        {
+            // Not the caller's token, so this is HttpClient's own request
+            // timeout — a transient condition, not a caller cancellation.
+            throw new SteamApiException(SteamApiErrorKind.ServerError, 0,
+                "The request to Steam timed out.");
+        }
+
+        using (response)
+        {
+            var body = await response.Content.ReadAsStringAsync(cancellationToken);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                throw Classify(response.StatusCode, body);
+            }
+
+            try
+            {
+                return JsonSerializer.Deserialize<T>(body, JsonOptions)
+                    ?? throw new SteamApiException(SteamApiErrorKind.Unknown, (int)response.StatusCode,
+                        "Steam returned an empty document.");
+            }
+            catch (JsonException)
+            {
+                // A 200 with a non-JSON body means Steam served an error or an
+                // interstitial page. Never surface a raw JsonException.
+                throw new SteamApiException(SteamApiErrorKind.Unknown, (int)response.StatusCode,
+                    "Steam returned a non-JSON response.");
+            }
         }
     }
 
@@ -74,7 +102,11 @@ public sealed class SteamApiClient
     {
         // Bodies are HTML, not JSON — match on text, and never echo the body
         // back, because the request URL it may contain carries the API key.
-        if (body.Contains("has no stats", StringComparison.OrdinalIgnoreCase))
+        // Steam only emits "has no stats" on a 400; scoping the check avoids a
+        // body-text coincidence on another status (e.g. a 429 whose body
+        // happens to contain the phrase) downgrading a real failure into a
+        // no-op.
+        if (status == HttpStatusCode.BadRequest && body.Contains("has no stats", StringComparison.OrdinalIgnoreCase))
         {
             return new SteamApiException(SteamApiErrorKind.NoStatsForApp, (int)status,
                 "The requested app has no achievements.");
