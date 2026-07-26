@@ -57,6 +57,14 @@
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
+        if (firstRender)
+        {
+            // Suppresses the browser's default scroll for the keys this list
+            // already handles, so pressing Down moves the selection instead
+            // of moving the selection and scrolling the page underneath it.
+            await Js.InvokeVoidAsync("queueScroll.attach", _list);
+        }
+
         // Focus once so the arrow keys work without the user clicking first,
         // including when arriving back here from a game screen.
         if (_focusPending)

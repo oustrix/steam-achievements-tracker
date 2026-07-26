@@ -1,7 +1,7 @@
 .shell {
     display: grid;
     grid-template-columns: 212px 1fr;
-    min-height: 100vh;
+    height: 100vh;
     background: var(--bg-shell);
 }
 
@@ -27,3 +27,39 @@
 .spacer { flex: 1; }
 
 .content { overflow: auto; position: relative; }
+
+/*
+    ::deep, not a plain selector in NavItem.razor.css: Blazor's CSS isolation
+    only stamps a component's scope attribute onto markup that component
+    renders itself, never onto markup rendered by a child component. NavItem
+    renders a NavLink, whose emitted <a> carries no scope attribute at all,
+    so rules scoped to NavItem never match it. .nav is AppShell's own markup,
+    so ::deep from here reaches through NavItem into what it renders.
+*/
+.nav ::deep .nav-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 9px 11px;
+    border-radius: 7px;
+    font-size: 13px;
+    color: var(--text-muted);
+    cursor: pointer;
+}
+
+.nav ::deep .nav-item:hover { color: var(--text); }
+
+.nav ::deep .nav-item.active {
+    background: var(--bg-active);
+    color: var(--text);
+}
+
+.nav ::deep .dot {
+    width: 5px;
+    height: 5px;
+    border-radius: 5px;
+    background: var(--dot-off);
+    flex: none;
+}
+
+.nav ::deep .nav-item.active .dot { background: var(--accent); }
