@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?><profile>
+	<steamID64>76561190000000002</steamID64>
+	<steamID><![CDATA[oustrix]]></steamID>
+	<onlineState>offline</onlineState>
+	<stateMessage><![CDATA[Offline]]></stateMessage>
+	<privacyState>friendsonly</privacyState>
+	<visibilityState>1</visibilityState>
+	<avatarIcon><![CDATA[https://avatars.akamai.steamstatic.com/0000000000000000000000000000000000000000.jpg]]></avatarIcon>
+	<avatarMedium><![CDATA[https://avatars.akamai.steamstatic.com/0000000000000000000000000000000000000000_medium.jpg]]></avatarMedium>
+	<avatarFull><![CDATA[https://avatars.akamai.steamstatic.com/0000000000000000000000000000000000000000_full.jpg]]></avatarFull>
+	<vacBanned>0</vacBanned>
+	<tradeBanState>None</tradeBanState>
+	<isLimitedAccount>0</isLimitedAccount>
+</profile>

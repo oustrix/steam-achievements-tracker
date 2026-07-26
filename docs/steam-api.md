@@ -66,7 +66,20 @@ soundtracks, demos and utilities.
   a key; it no longer does. Verified against two public profiles, with and
   without a browser User-Agent — the UA is not the cause.
 - Only `/profiles/<id>/?xml=1` remains public: persona name, avatar, online
-  state. Used during onboarding for the "is this you?" step.
+  state. Used during onboarding for the "is this you?" step. Re-verified
+  2026-07-26.
+
+  The document's root element is `<profile>`, and every text field is wrapped
+  in `CDATA`. The two fields onboarding uses are `<steamID>` (the persona name,
+  *not* the id) and `<avatarFull>`.
+
+  A `privacyState` of `friendsonly` still returns the name and the avatar, so
+  privacy does not have to be treated as a failure.
+
+  **A profile that does not exist answers HTTP 200**, with
+  `<response><error>The specified profile could not be found.</error></response>`.
+  The status code carries no information here; a parser has to branch on the
+  root element.
 
 ## Limits
 
