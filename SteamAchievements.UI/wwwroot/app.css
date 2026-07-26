@@ -33,7 +33,13 @@
     --text-dim: #6f6a63;
     --text-faint: #57515e;
 
-    /* Overridden on the shell root by the accent picker. */
+    /*
+      --accent is overridden on the shell root by the accent picker.
+      --accent-hover and --accent-dim are NOT overridden here: they are
+      derived from --accent on .shell below, so they follow whatever the
+      picker chooses. These four values are the fallback used before the
+      shell renders, and the mockup's own hand-picked amber record.
+    */
     --accent: #e0a355;
     --accent-hover: #f0bd7c;
     --accent-dim: #7a6a52;
@@ -63,6 +69,29 @@
     */
     --placeholder-dark: repeating-linear-gradient(135deg, #232028 0 10px, #1d1b22 10px 20px);
     --bg-hatch-dark: #1d1b22;
+}
+
+/*
+  --accent-hover and --accent-dim are relationships to --accent, not colours of
+  their own: the same hue at a fixed saturation and lightness ratio. Written
+  that way they reproduce the mockup's hand-picked amber to within 1/255 and
+  follow the other three accents too, so the picker really does rewrite one
+  variable and have everything follow.
+
+  These MUST be declared on .shell, not in :root. A custom property is resolved
+  where it is declared, and in :root --accent is always the default amber — so
+  a derivation placed there silently keeps the amber dim no matter what the
+  user picks. That is the exact bug being fixed here.
+
+  Guarded because an engine without relative colour would leave both tokens
+  invalid at computed-value time, which is worse than not following: the
+  :root values above then stand and behaviour is unchanged.
+*/
+@supports (color: hsl(from red h s l)) {
+    .shell {
+        --accent-hover: hsl(from var(--accent) h calc(s * 1.15) calc(l * 1.18));
+        --accent-dim:   hsl(from var(--accent) h calc(s * 0.30) calc(l * 0.66));
+    }
 }
 
 * { box-sizing: border-box; }
