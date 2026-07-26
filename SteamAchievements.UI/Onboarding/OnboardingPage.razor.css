@@ -87,4 +87,4 @@
     color: var(--text-faded);
 }
 
-.pulse { width: 7px; height: 7px; border-radius: 7px; background: var(--accent); flex: none; }
+.dot { width: 7px; height: 7px; border-radius: 7px; background: var(--accent); flex: none; }
