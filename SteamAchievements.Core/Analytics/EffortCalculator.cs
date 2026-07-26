@@ -37,8 +37,11 @@ public static class EffortCalculator
     /// Matches the equal-weight treatment used when a whole game has no rarity
     /// data at all — an unknown percent must never be treated as a verified
     /// zero, which would wrongly claim maximal rarity.
+    ///
+    /// Public because the game screen orders individual achievements by the
+    /// same cost and must agree with the total shown above the list.
     /// </summary>
-    private const double UnknownRarityCost = 1;
+    public const double UnknownRarityCost = 1;
 
     public static double Cost(double percent, double maxPercent)
     {
