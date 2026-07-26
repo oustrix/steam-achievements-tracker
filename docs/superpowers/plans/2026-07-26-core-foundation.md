@@ -92,47 +92,19 @@ dotnet add SteamAchievements.Windows    reference SteamAchievements.Core SteamAc
 rm SteamAchievements.Core/Class1.cs
 ```
 
-- [ ] **Step 2: Write the smoke test**
+- [ ] **Step 2: Verify the solution builds**
 
-`SteamAchievements.Core.Tests/SmokeTests.cs`:
+Run: `dotnet build SteamAchievements.Core SteamAchievements.Core.Tests`
+Expected: build succeeds.
 
-```csharp
-namespace SteamAchievements.Core.Tests;
+This task deliberately adds no test. A test asserting only that one project
+references another verifies nothing about behaviour, and a placeholder class
+created solely to satisfy it is dead code. Task 1's deliverable is a working
+pipeline, and its verification is the pipeline itself: `dotnet test` passes
+trivially with zero tests, the Windows job produces an artifact, and that
+artifact launches. Real tests arrive with real behaviour in Task 2.
 
-public class SmokeTests
-{
-    [Fact]
-    public void TestProjectReferencesCore()
-    {
-        var assembly = typeof(Local.VdfParser).Assembly;
-        Assert.Equal("SteamAchievements.Core", assembly.GetName().Name);
-    }
-}
-```
-
-- [ ] **Step 3: Run the test to verify it fails**
-
-Run: `dotnet test`
-Expected: FAIL — `VdfParser` does not exist yet.
-
-- [ ] **Step 4: Add the placeholder type so the reference resolves**
-
-`SteamAchievements.Core/Local/VdfParser.cs`:
-
-```csharp
-namespace SteamAchievements.Core.Local;
-
-public static class VdfParser
-{
-}
-```
-
-- [ ] **Step 5: Run the test to verify it passes**
-
-Run: `dotnet test`
-Expected: PASS, 1 test.
-
-- [ ] **Step 6: Write the CI workflow**
+- [ ] **Step 3: Write the CI workflow**
 
 `.github/workflows/ci.yml`:
 
@@ -181,7 +153,7 @@ jobs:
 
 Trimming stays off deliberately: WPF and Blazor use reflection, and a trimmed build fails at runtime in ways only reproducible on Windows.
 
-- [ ] **Step 7: Commit and verify the pipeline end to end**
+- [ ] **Step 4: Commit and verify the pipeline end to end**
 
 ```bash
 git add -A
@@ -198,7 +170,7 @@ Then confirm on GitHub that both jobs pass and that the artifact downloads and l
 Valve's KeyValues format is what `loginusers.vdf`, `libraryfolders.vdf` and every `appmanifest_*.acf` use. It is plain text, so it parses and tests entirely on macOS.
 
 **Files:**
-- Create: `SteamAchievements.Core/Local/VdfParser.cs` (replacing the placeholder), `SteamAchievements.Core/Local/VdfNode.cs`
+- Create: `SteamAchievements.Core/Local/VdfParser.cs`, `SteamAchievements.Core/Local/VdfNode.cs`
 - Test: `SteamAchievements.Core.Tests/Local/VdfParserTests.cs`
 - Create: `testdata/loginusers.vdf`
 
