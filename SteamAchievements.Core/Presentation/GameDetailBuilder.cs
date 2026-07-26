@@ -51,6 +51,7 @@ public static class GameDetailBuilder
             complete ? "complete" : QueueRowBuilder.EffortLabel(effort.RemainingEffort),
             effort.RemainingCount,
             double.IsNaN(rarestPercent) ? "unknown" : Formatting.Percent(rarestPercent),
+            effort.RarityUnknown,
             remaining,
             unlocked);
     }

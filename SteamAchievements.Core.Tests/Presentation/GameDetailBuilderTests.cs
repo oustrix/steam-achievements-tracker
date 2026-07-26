@@ -112,6 +112,34 @@ public class GameDetailBuilderTests
     }
 
     [Fact]
+    public void ReportsRarityUnknownWhenNoAchievementHasAKnownPercentage()
+    {
+        var view = GameDetailBuilder.Build(Game(),
+        [
+            Achievement("Locked", unlocked: false, percent: null),
+            Achievement("AlsoLocked", unlocked: false, percent: null),
+        ], Now);
+
+        Assert.True(view.RarityUnknown);
+    }
+
+    [Fact]
+    public void DoesNotReportRarityUnknownWhenOnlySomeLockedAchievementsLackAPercentage()
+    {
+        // Divinity's shape: most locked achievements carry rarity data and a
+        // handful do not. The game is not rarity-less, so RarityUnknown must
+        // stay false even though RarestText alone (the rarest known locked
+        // percentage) cannot make that distinction on its own.
+        var view = GameDetailBuilder.Build(Game(),
+        [
+            Achievement("Known", unlocked: false, percent: 1.2),
+            Achievement("Unknown", unlocked: false, percent: null),
+        ], Now);
+
+        Assert.False(view.RarityUnknown);
+    }
+
+    [Fact]
     public void ExplainsWhyAHiddenAchievementHasNoDescription()
     {
         var view = GameDetailBuilder.Build(Game(),

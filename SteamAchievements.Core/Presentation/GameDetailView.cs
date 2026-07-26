@@ -28,5 +28,6 @@ public sealed record GameDetailView(
     string EffortLabel,
     int Remaining,
     string RarestText,
+    bool RarityUnknown,
     IReadOnlyList<AchievementRow> RemainingAchievements,
     IReadOnlyList<AchievementRow> UnlockedAchievements);

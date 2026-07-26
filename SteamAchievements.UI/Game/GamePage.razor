@@ -35,7 +35,7 @@ else
             </div>
         </div>
 
-        @if (_game.RarestText == "unknown" && _game.Remaining > 0)
+        @if (_game.RarityUnknown && _game.Remaining > 0)
         {
             <Notice Title="Rarity data unavailable">
                 <Body>
