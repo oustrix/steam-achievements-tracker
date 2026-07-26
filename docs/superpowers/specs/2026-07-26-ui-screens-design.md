@@ -508,3 +508,96 @@ subsystem of its own.
 Already recorded as out of scope for the MVP in design doc §10 and unchanged
 here: DLC separation, trend charts, the full library grid, friend comparison,
 and code signing.
+
+## 15. Divergences from this spec during implementation
+
+- `QueueFilter` and `QueueCriteria` were added to `Core/Presentation`; section
+  5 did not list them. Filtering and sorting are real behaviour with real edge
+  cases — a stable secondary sort key, direction flips per sort, a
+  minimum-playtime threshold — and that belongs under ordinary unit tests
+  rather than folded into a component where it cannot be tested without a
+  renderer.
+- `IClock` and `ISyncPresenter` were added to `SteamAchievements.UI/State`;
+  section 8 described only `QueueState`. Core's presentation layer refuses to
+  read the clock — `ILibraryQuery` takes `now` as a parameter, by design — so
+  something above it has to supply one, and the sync screen needed a seam to
+  render against before `SyncOrchestrator` is actually wired to it.
+- `Formatting` gained minute and hour buckets that section 5.4 did not
+  mention, because the sidebar's "Last sync 14 min ago" needs a bucket finer
+  than the day-level relative dates the achievement rows use.
+- `CoverImage` was added to `Shared`; section 7 did not list it. Section 10
+  requires a fallback for missing cover art, and both the queue and the game
+  screen need the identical one — a second implementation would drift from
+  the first the moment either screen changed.
+- Section 7 listed `EffortMeter`, `AccountCard`, `ApiKeyField` and
+  `DangerZone` as separate components. Each is used exactly once and carries
+  no logic of its own, so they were folded into their parent screens instead;
+  `DangerZone` became a `Notice` with `Severity="Danger"`, which the shared
+  component already supported.
+- The queue row component is `QueueRowCard`, not `QueueRow`: that name was
+  already taken by the presentation record it renders, and reusing it would
+  have meant importing two different `QueueRow` types under two different
+  namespaces on every page that touches the queue.
+- `QueueFilter.Apply` returns `List<QueueRow>` rather than
+  `IReadOnlyList<QueueRow>`. Blazor's `Virtualize` binds its `Items` parameter
+  to `ICollection<T>`, which `IReadOnlyList<T>` does not satisfy — declaring
+  the concrete type the method actually builds beats making every caller
+  downcast it back.
+- `Database.OpenRead` deliberately does not open with `Mode=ReadOnly`. A
+  read-only SQLite connection to a WAL database still needs write access to
+  the shared-memory index file, so the read-only mode fails outright rather
+  than degrading — section 4.2's "no shared lock, no shared connection" holds,
+  but the connection string itself could not be as literal as the name
+  suggests.
+- `GameDetailView` carries a `RarityUnknown` flag that section 6's record did
+  not have. The spec gates the "Rarity data unavailable" notice on that
+  condition, but the record as first drafted had no way to express it, and the
+  first implementation compared a display string instead — a comparison that
+  breaks the moment the string's wording changes.
+- `IUserPreferences` gained `event Action? Changed`. A Blazor layout does not
+  re-render because a page nested inside it changed state, so without an
+  explicit announcement the new accent chosen on the settings screen could not
+  reach the shell until the next full navigation.
+- The palette in section 6 gained four values its table was missing:
+  `--border-selected`, `--text-faded`, `--placeholder-dark` and
+  `--bg-hatch-dark`. The table was written from the mockup's prose rather than
+  its rendered output, and these are values the mockup actually paints that
+  the table simply did not capture.
+- `--accent-hover` and `--accent-dim` are now derived from `--accent` on
+  `.shell` with relative colour syntax under an `@supports` guard, rather than
+  being fixed values. Section 13 claimed the switcher rewrites one variable
+  "and everything follows"; it did not — those two stayed amber under every
+  other accent until this change. The derivation reproduces the mockup's
+  hand-picked amber values to within 1/255.
+- The onboarding key card uses `var(--warn-bg)` where the mockup paints
+  `#1c1811`. The two differ by at most 5/255 per channel, which is not
+  perceptible across a card background, and adding a near-duplicate token to
+  the palette to chase that difference would cost the palette more than the
+  difference itself does.
+- The onboarding screen shows a deliberately invalid SteamID64 placeholder
+  rather than the mockup's real-looking account, because `CLAUDE.md` forbids
+  committing real Steam identifiers, and the onboarding fixture is exactly the
+  kind of thing a search for "steamid" would need to catch.
+- `ReasonWriter` spells small counts as words — "six of them" rather than "6
+  of them". The mockup's own prose is inconsistent on this, writing digits in
+  one place and words two lines later; a generator needs one rule rather than
+  a case-by-case match to hand-written text, so the rule won and the digit
+  became a word.
+- `StepIndicator` and `AccentPicker` carry ARIA semantics — list and listitem
+  roles, an accessible name, `aria-current`, `aria-pressed`, hidden decorative
+  separators — that the mockup has no equivalent for, since it is a static
+  HTML rendering with no assistive-technology audience of its own. A real
+  component with real keyboard and screen-reader users needs them regardless
+  of what the source document showed. Note that Blazor renders a `bool`
+  attribute value as an HTML boolean attribute — present-but-empty for true,
+  absent for false — so ARIA states must be bound to explicit `"true"`/`"false"`
+  strings; binding them to a `bool` compiles, renders, and silently exposes
+  nothing. `AccentPicker`'s `aria-pressed` shipped in the bool-bound form and
+  was caught only by reading the accessibility tree, not by reading the
+  markup.
+- The preview fixtures do not reproduce the mockup's library. They are a
+  fourteen-game set chosen to exercise the ranking formula and the reason
+  rules — including a rarity-unknown game and two complete ones — so the
+  queue shows twelve rows in a different order from the mockup, with reasons
+  in `ReasonWriter`'s format rather than the mockup's sample prose. The
+  mockup is the source of truth for layout and tone, not for data.

@@ -45,6 +45,8 @@ leak into Core — it breaks local development entirely.
 dotnet test SteamAchievements.Core.Tests   # the local feedback loop
 dotnet build SteamAchievements.Core        # quick type check
 dotnet format                               # before committing
+dotnet run --project SteamAchievements.Preview   # see the UI on macOS
+dotnet build SteamAchievements.UI                # type check the components
 ```
 
 Always name the test project. A bare `dotnet test` at the repository root
@@ -65,15 +67,23 @@ about your change.
 
 ## Current state
 
-`SteamAchievements.Core` is complete and covered by 74 tests: VDF parsing,
-reading the logged-in account, the Steam API client with its error taxonomy,
-SQLite storage, the sync planner and orchestrator, and the ranking formula.
+`SteamAchievements.Core` is complete and covered by tests: VDF parsing, reading
+the logged-in account, the Steam API client with its error taxonomy, SQLite
+storage, the sync planner and orchestrator, the ranking formula, and the
+presentation layer behind the screens.
 
-Not built yet: everything the user can see. The WPF host is an empty window,
-`SteamAchievements.UI` still holds Razor template boilerplate, and the
-`ISteamPathProvider` / `ISecretStore` implementations, onboarding and screens
-belong to a follow-up plan. The `settings` table and `sync_state.last_error`
-are written but nothing reads them yet — that is expected, not an oversight.
+`SteamAchievements.UI` holds all six screens from the design mockup. They are
+developed and verified on macOS through `SteamAchievements.Preview`, a
+development-only Blazor Server host that renders the same components against
+fixtures — `dotnet run --project SteamAchievements.Preview`, then
+http://localhost:5100. Error and empty states are reachable there through
+`?scenario=empty|invalid-key|private-profile|rarity-unknown|other-account`.
+
+Not built yet: the WPF host itself. `SteamAchievements.Windows` is still an
+empty window with no BlazorWebView reference, `ISteamPathProvider` has no
+implementation, `ISecretStore` does not exist, and nothing behind the sync,
+settings and onboarding screens acts. Section 14 of
+`docs/superpowers/specs/2026-07-26-ui-screens-design.md` lists all of it.
 
 ## Facts learned the hard way
 
@@ -95,6 +105,17 @@ These cost real debugging time. Do not rediscover them.
   than one file.
 - **Steam's error responses are HTML, not JSON**, and a missing key returns 400
   or 401 depending on the endpoint. See `docs/steam-api.md`.
+- **The UI must not read through `GameRepository`.** It wraps the sync
+  engine's single connection, which is not thread-safe and is already
+  serialized behind a lock. `SqliteLibraryQuery` takes its own handle from
+  `Database.OpenRead`; WAL lets it read while a sync writes. Note that
+  `Mode=ReadOnly` is deliberately *not* used — a read-only SQLite connection to
+  a WAL database still needs write access to the shared-memory index file.
+- **`Virtualize` and `scrollIntoView` do not mix.** An off-screen row is not in
+  the DOM, so keyboard navigation scrolls by arithmetic instead:
+  `scrollTop = index * rowHeight`. That is why the queue row height is a fixed
+  constant duplicated between `QueuePage.razor` and its stylesheet — a
+  mismatch shows up as drift, not as an error.
 
 ## Reviewing your own plans
 

@@ -16,6 +16,10 @@ jobs:
         with:
           dotnet-version: '10.0.x'
       - run: dotnet test SteamAchievements.Core.Tests --configuration Release --logger trx
+      - name: Build the component library
+        run: dotnet build SteamAchievements.UI --configuration Release
+      - name: Build the preview host
+        run: dotnet build SteamAchievements.Preview --configuration Release
 
   build-windows:
     runs-on: windows-latest
