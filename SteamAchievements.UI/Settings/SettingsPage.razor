@@ -57,7 +57,7 @@
 @code {
     private LibrarySummary _summary = new(0, 0, "", "");
 
-    private string Accent => Preferences.Accent ?? AppShell.DefaultAccent;
+    private string Accent => Preferences.Accent ?? AccentPalette.Default;
 
     protected override void OnInitialized() => _summary = Library.GetSummary(Clock.Now);
 

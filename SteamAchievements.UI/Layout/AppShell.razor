@@ -4,7 +4,7 @@
 @inject IUserPreferences Preferences
 @inject IClock Clock
 
-<div class="shell" style="--accent: @(Preferences.Accent ?? DefaultAccent)">
+<div class="shell" style="--accent: @(Preferences.Accent ?? AccentPalette.Default)">
     <nav class="sidebar">
         <div class="brand">
             <div class="name">Achievements</div>
@@ -28,9 +28,6 @@
 </div>
 
 @code {
-    /// <summary>Amber, matching the mockup's default.</summary>
-    public const string DefaultAccent = "#e0a355";
-
     private LibrarySummary _summary = new(0, 0, "", "");
 
     protected override void OnInitialized()
