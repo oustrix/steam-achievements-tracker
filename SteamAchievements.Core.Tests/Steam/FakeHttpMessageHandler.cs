@@ -6,7 +6,12 @@ public sealed class FakeHttpMessageHandler : HttpMessageHandler
 {
     private readonly Func<HttpRequestMessage, HttpResponseMessage> _responder;
 
-    public List<Uri> Requests { get; } = [];
+    // Backed by a thread-safe collection: SyncOrchestrator drives this handler
+    // from a worker pool, so SendAsync can be entered concurrently from
+    // multiple threads. A plain List<Uri> is not safe under concurrent Add.
+    private readonly System.Collections.Concurrent.ConcurrentQueue<Uri> _requests = new();
+
+    public IReadOnlyCollection<Uri> Requests => _requests;
 
     public FakeHttpMessageHandler(Func<HttpRequestMessage, HttpResponseMessage> responder) =>
         _responder = responder;
@@ -20,7 +25,7 @@ public sealed class FakeHttpMessageHandler : HttpMessageHandler
     protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        Requests.Add(request.RequestUri!);
+        _requests.Enqueue(request.RequestUri!);
         return Task.FromResult(_responder(request));
     }
 }
