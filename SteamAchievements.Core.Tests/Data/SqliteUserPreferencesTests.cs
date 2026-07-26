@@ -49,4 +49,24 @@ public class SqliteUserPreferencesTests
         Assert.Equal("oustrix", Dapper.SqlMapper.QuerySingle<string>(
             connection, "SELECT persona_name FROM settings WHERE id = 1"));
     }
+
+    /// <summary>
+    /// A subscriber (AppShell, in the UI) reads <c>Accent</c> from inside the
+    /// handler to repaint. If <c>Changed</c> fired before the write landed,
+    /// that read would still see the old colour, so the ordering — not just
+    /// "an event fired at all" — is the part worth pinning against a future
+    /// refactor of <c>SetAccent</c>.
+    /// </summary>
+    [Fact]
+    public void RaisesChangedOnlyAfterTheNewAccentIsAlreadyPersisted()
+    {
+        using var connection = Database.Open(":memory:");
+        var preferences = new SqliteUserPreferences(connection);
+        string? accentSeenByHandler = null;
+
+        preferences.Changed += () => accentSeenByHandler = preferences.Accent;
+        preferences.SetAccent("#a8b58c");
+
+        Assert.Equal("#a8b58c", accentSeenByHandler);
+    }
 }

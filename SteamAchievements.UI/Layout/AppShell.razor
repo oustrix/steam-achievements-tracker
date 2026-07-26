@@ -1,4 +1,5 @@
 @inherits LayoutComponentBase
+@implements IDisposable
 @inject ILibraryQuery Library
 @inject IUserPreferences Preferences
 @inject IClock Clock
@@ -26,8 +27,6 @@
     </main>
 </div>
 
-@implements IDisposable
-
 @code {
     /// <summary>Amber, matching the mockup's default.</summary>
     public const string DefaultAccent = "#e0a355";
@@ -40,7 +39,17 @@
         Preferences.Changed += HandlePreferencesChanged;
     }
 
-    private void HandlePreferencesChanged() => StateHasChanged();
+    // Changed carries no threading contract on the Core interface, and the
+    // shipping SqliteUserPreferences will be called from background sync
+    // work, not only from a click. Dispatching through InvokeAsync keeps
+    // StateHasChanged safe regardless of which context raised the event.
+    private void HandlePreferencesChanged() => InvokeAsync(StateHasChanged);
 
+    // Load-bearing, not cleanup for its own sake: IUserPreferences will be a
+    // singleton in the shipping host, so it outlives any one AppShell
+    // instance. A page that declares its own @layout destroys and recreates
+    // AppShell, and without unsubscribing here each recreation would leave
+    // the previous instance's handler attached, leaking one subscription per
+    // layout swap.
     public void Dispose() => Preferences.Changed -= HandlePreferencesChanged;
 }
