@@ -10,6 +10,15 @@
     <PackageReference Include="Dapper" Version="2.1.79" />
     <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.10" />
     <PackageReference Include="Polly" Version="8.7.0" />
+    <!--
+      Microsoft.Data.Sqlite 10.0.10 (the latest stable release) pins
+      SQLitePCLRaw.bundle_e_sqlite3/lib.e_sqlite3 to 2.1.11, which bundles a
+      SQLite build vulnerable to GHSA-2m69-gcr7-jv3q (CVE-2025-6965, fixed in
+      SQLite 3.50.2). 2.1.12 bundles a patched SQLite; pin it directly so it
+      wins over the transitive 2.1.11 without waiting on a new
+      Microsoft.Data.Sqlite release.
+    -->
+    <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" Version="2.1.12" />
   </ItemGroup>
 
 </Project>
