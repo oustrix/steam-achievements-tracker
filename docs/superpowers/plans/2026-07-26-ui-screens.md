@@ -362,7 +362,11 @@ public class ReasonWriterTests
             .Concat(Enumerable.Range(0, 6).Select(_ => Locked(null)))
             .ToList();
 
-        Assert.Equal("39 left, rarity unknown for 6 of them", ReasonWriter.Write(achievements));
+        // "six", not "6": the mockup writes a digit here and a word two lines
+        // later ("four below 5% of owners"). It is hand-written prose and
+        // inconsistent with itself; the rule is words up to nine everywhere
+        // inside the clause. Do not "fix" this back to match the mockup.
+        Assert.Equal("39 left, rarity unknown for six of them", ReasonWriter.Write(achievements));
     }
 
     [Fact]
@@ -4658,7 +4662,7 @@ Run: `dotnet run --project SteamAchievements.Preview` and walk through these URL
 | `/sync?scenario=other-account` | The same card plus the amber "Paused after five consecutive failures" notice with a "Retry now" button |
 | `/sync?scenario=invalid-key` | "No sync running" with disabled buttons, the red "Steam rejected the API key" notice whose button opens Settings, the amber privacy notice, and "No syncs recorded yet." |
 | `/?scenario=empty` | "Nothing left to rank" |
-| `/?scenario=rarity-unknown` | One row, Divinity, reading "39 left, rarity unknown for 6 of them" |
+| `/?scenario=rarity-unknown` | One row, Divinity, reading "39 left, rarity unknown for six of them" |
 
 - [ ] **Step 6: Commit**
 

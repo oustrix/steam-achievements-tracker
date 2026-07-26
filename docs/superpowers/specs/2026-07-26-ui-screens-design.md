@@ -235,13 +235,19 @@ and `k` counts the subset being described:
 | Nothing locked | `Complete — last unlock 24 Mar 2026` |
 | Nothing locked, no unlock dates | `Complete` |
 | Rarity unknown for all locked | `39 left, rarity unknown for all of them` |
-| Rarity unknown for some (k > 0) | `39 left, rarity unknown for 6 of them` |
+| Rarity unknown for some (k > 0) | `39 left, rarity unknown for six of them` |
 | Exactly one rare, and n ≤ 4 | `3 left: two common, one rare (2.1%)` |
 | One or more rare | `16 left, four below 5% of owners` |
 | None rare | `6 left, all above 8% of owners` |
 
 In the last form the number is `floor` of the lowest percentage among the
 locked achievements — 8 for a minimum of 8.4%, as in the mockup.
+
+One place where this diverges from the mockup deliberately: the mockup writes
+*"rarity unknown for 6 of them"* with a digit, two lines after writing *"four
+below 5% of owners"* with a word. Both are in-clause counts, so one of them
+has to give. The rule wins and the digit becomes "six" — an undocumented
+carve-out for a single clause would cost more than the divergence does.
 
 Two different count styles, as in the mockup, and they must not be confused.
 The leading count is always digits — `3 left`, `16 left`, `297 left` — because
