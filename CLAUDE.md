@@ -42,10 +42,15 @@ leak into Core — it breaks local development entirely.
 ## Commands
 
 ```bash
-dotnet test                                  # the local feedback loop
-dotnet build SteamAchievements.Core          # quick type check
-dotnet format                                # before committing
+dotnet test SteamAchievements.Core.Tests   # the local feedback loop
+dotnet build SteamAchievements.Core        # quick type check
+dotnet format                               # before committing
 ```
+
+Always name the test project. A bare `dotnet test` at the repository root
+fails on macOS with NETSDK1100, because the solution includes the
+`net10.0-windows` WPF project. That failure is about the host platform, not
+about your change.
 
 ## Working with the Steam API
 

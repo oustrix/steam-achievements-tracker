@@ -281,7 +281,7 @@ The missing-key case returns an empty node rather than throwing, because callers
 
 - [ ] **Step 3: Run tests to verify they fail**
 
-Run: `dotnet test --filter VdfParserTests`
+Run: `dotnet test SteamAchievements.Core.Tests --filter VdfParserTests`
 Expected: FAIL — `Parse` and `VdfNode` do not exist.
 
 - [ ] **Step 4: Implement `VdfNode`**
@@ -437,7 +437,7 @@ public static class VdfParser
 
 - [ ] **Step 6: Run tests to verify they pass**
 
-Run: `dotnet test --filter VdfParserTests`
+Run: `dotnet test SteamAchievements.Core.Tests --filter VdfParserTests`
 Expected: PASS, 5 tests.
 
 - [ ] **Step 7: Commit**
@@ -570,7 +570,7 @@ public static class TestPaths
 
 - [ ] **Step 3: Run tests to verify they fail**
 
-Run: `dotnet test --filter LoginUsersReaderTests`
+Run: `dotnet test SteamAchievements.Core.Tests --filter LoginUsersReaderTests`
 Expected: FAIL — `LoginUsersReader` does not exist.
 
 - [ ] **Step 4: Implement the account record and the path contract**
@@ -646,7 +646,7 @@ public static class LoginUsersReader
 
 - [ ] **Step 6: Run tests to verify they pass**
 
-Run: `dotnet test --filter LoginUsersReaderTests`
+Run: `dotnet test SteamAchievements.Core.Tests --filter LoginUsersReaderTests`
 Expected: PASS, 5 tests.
 
 - [ ] **Step 7: Commit**
@@ -804,7 +804,7 @@ The last test matters more than it looks: exception messages end up in logs and 
 
 - [ ] **Step 4: Run tests to verify they fail**
 
-Run: `dotnet test --filter SteamApiClientTests`
+Run: `dotnet test SteamAchievements.Core.Tests --filter SteamApiClientTests`
 Expected: FAIL — `SteamApiClient` does not exist.
 
 - [ ] **Step 5: Implement the error taxonomy**
@@ -940,7 +940,7 @@ Note that `Classify` collapses 400 and 401 into `InvalidKey` **after** checking 
 
 - [ ] **Step 7: Run tests to verify they pass**
 
-Run: `dotnet test --filter SteamApiClientTests`
+Run: `dotnet test SteamAchievements.Core.Tests --filter SteamApiClientTests`
 Expected: FAIL on the four endpoint methods still missing. Add them as stubs calling `GetJsonAsync<JsonDocument>` with the paths defined in Task 5, then re-run — 6 tests PASS.
 
 - [ ] **Step 8: Commit**
@@ -1146,7 +1146,7 @@ public class SteamApiEndpointTests
 
 - [ ] **Step 3: Run tests to verify they fail**
 
-Run: `dotnet test --filter SteamApiEndpointTests`
+Run: `dotnet test SteamAchievements.Core.Tests --filter SteamApiEndpointTests`
 Expected: FAIL — endpoint methods return stubs.
 
 - [ ] **Step 4: Implement the DTOs and domain records**
@@ -1343,7 +1343,7 @@ Add to `SteamAchievements.Core/Steam/SteamApiClient.cs`:
 
 - [ ] **Step 6: Run tests to verify they pass**
 
-Run: `dotnet test --filter SteamApi`
+Run: `dotnet test SteamAchievements.Core.Tests --filter SteamApi`
 Expected: PASS, 12 tests across both API test classes.
 
 - [ ] **Step 7: Commit**
@@ -1503,7 +1503,7 @@ tests can assert against raw SQL without adding a read method used only by tests
 
 - [ ] **Step 3: Run tests to verify they fail**
 
-Run: `dotnet test --filter GameRepositoryTests`
+Run: `dotnet test SteamAchievements.Core.Tests --filter GameRepositoryTests`
 Expected: FAIL — `Database` does not exist.
 
 - [ ] **Step 4: Implement the schema and migrations**
@@ -1904,7 +1904,7 @@ public sealed class GameRepository
 
 - [ ] **Step 6: Run tests to verify they pass**
 
-Run: `dotnet test --filter GameRepositoryTests`
+Run: `dotnet test SteamAchievements.Core.Tests --filter GameRepositoryTests`
 Expected: PASS, 6 tests.
 
 - [ ] **Step 7: Commit**
@@ -2061,7 +2061,7 @@ public class SyncPlannerTests
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `dotnet test --filter SyncPlannerTests`
+Run: `dotnet test SteamAchievements.Core.Tests --filter SyncPlannerTests`
 Expected: FAIL — `SyncPlanner` does not exist.
 
 - [ ] **Step 3: Implement the options**
@@ -2139,7 +2139,7 @@ public static class SyncPlanner
 
 - [ ] **Step 5: Run tests to verify they pass**
 
-Run: `dotnet test --filter SyncPlannerTests`
+Run: `dotnet test SteamAchievements.Core.Tests --filter SyncPlannerTests`
 Expected: PASS, 8 tests.
 
 - [ ] **Step 6: Commit**
@@ -2301,7 +2301,7 @@ The retry test is the important one: an invalid key retried with backoff turns a
 
 - [ ] **Step 3: Run tests to verify they fail**
 
-Run: `dotnet test --filter SyncOrchestratorTests`
+Run: `dotnet test SteamAchievements.Core.Tests --filter SyncOrchestratorTests`
 Expected: FAIL — `SyncOrchestrator` does not exist.
 
 - [ ] **Step 4: Implement the rate limiter and progress record**
@@ -2506,7 +2506,7 @@ public sealed class SyncOrchestrator
 
 - [ ] **Step 6: Run tests to verify they pass**
 
-Run: `dotnet test --filter SyncOrchestratorTests`
+Run: `dotnet test SteamAchievements.Core.Tests --filter SyncOrchestratorTests`
 Expected: PASS, 5 tests.
 
 - [ ] **Step 7: Commit**
@@ -2680,7 +2680,7 @@ public class EffortCalculatorTests
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `dotnet test --filter EffortCalculatorTests`
+Run: `dotnet test SteamAchievements.Core.Tests --filter EffortCalculatorTests`
 Expected: FAIL — `EffortCalculator` does not exist.
 
 - [ ] **Step 3: Implement the calculator**
@@ -2771,12 +2771,12 @@ public static class EffortCalculator
 
 - [ ] **Step 4: Run tests to verify they pass**
 
-Run: `dotnet test --filter EffortCalculatorTests`
+Run: `dotnet test SteamAchievements.Core.Tests --filter EffortCalculatorTests`
 Expected: PASS, 11 tests.
 
 - [ ] **Step 5: Run the whole suite**
 
-Run: `dotnet test`
+Run: `dotnet test SteamAchievements.Core.Tests`
 Expected: PASS, 47 tests total.
 
 - [ ] **Step 6: Commit**
