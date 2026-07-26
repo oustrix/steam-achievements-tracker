@@ -1,0 +1,9 @@
+.list {
+    padding: 18px 30px 40px;
+    outline: none;
+}
+
+.slot {
+    height: 130px;
+    padding-bottom: 8px;
+}

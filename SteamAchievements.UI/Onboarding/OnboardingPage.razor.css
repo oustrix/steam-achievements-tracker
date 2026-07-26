@@ -1,0 +1,90 @@
+.page {
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+    padding: 36px 30px 46px;
+    max-width: 660px;
+    margin: 0 auto;
+}
+
+.card {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    padding: 22px;
+    border: 1px solid var(--border-subtle);
+    border-radius: 11px;
+    background: var(--bg-card);
+}
+
+/* The mockup paints this card #1c1811. That is (28,24,17) against --warn-bg's
+   (33,26,18) — at most 5/255 on a channel, which is not perceptible across a
+   card background. Reusing the token beats adding a near-duplicate to the
+   palette, since near-duplicate tokens are what make a palette hard to use. */
+.card.key { border-color: var(--warn-border); background: var(--warn-bg); }
+.card.dim { opacity: 0.55; gap: 12px; }
+
+.head { display: flex; flex-direction: column; gap: 5px; }
+.title { font-size: 17px; font-weight: 600; letter-spacing: -0.01em; }
+.sub { font-size: 13px; color: var(--text-muted); text-wrap: pretty; }
+.sub.bright { color: var(--text-secondary); }
+
+.account {
+    display: flex;
+    gap: 14px;
+    align-items: center;
+    padding: 14px;
+    border: 1px solid var(--border);
+    border-radius: 9px;
+    background: var(--bg-raised);
+}
+
+.avatar { width: 52px; height: 52px; border-radius: 8px; background: var(--placeholder); flex: none; }
+.who { display: flex; flex-direction: column; gap: 3px; }
+.who .name { font-size: 15px; font-weight: 600; }
+.who .id { font-size: 12px; color: var(--text-dim); }
+.spacer { flex: 1; }
+
+.primary {
+    font: inherit;
+    font-size: 13px;
+    font-weight: 600;
+    padding: 11px 16px;
+    border-radius: 8px;
+    border: 0;
+    background: var(--accent);
+    color: var(--on-accent);
+    cursor: pointer;
+}
+
+.primary:disabled { opacity: 0.55; cursor: default; }
+
+.link {
+    align-self: flex-start;
+    font: inherit;
+    font-size: 12px;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: var(--text-muted);
+    text-decoration: underline;
+    cursor: pointer;
+}
+
+.key-row { display: flex; gap: 10px; flex-wrap: wrap; }
+
+.watching {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex: 1;
+    min-width: 220px;
+    font-size: 13px;
+    padding: 11px 13px;
+    border-radius: 8px;
+    border: 1px dashed var(--warn-border);
+    background: var(--warn-bg);
+    color: var(--text-faded);
+}
+
+.dot { width: 7px; height: 7px; border-radius: 7px; background: var(--accent); flex: none; }

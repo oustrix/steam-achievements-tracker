@@ -24,14 +24,22 @@
     --border: #2b2833;
     --border-strong: #3a3444;
     --border-hover: #544c60;
+    --border-selected: #4a4256;
 
     --text: #edeae3;
     --text-secondary: #c6bfb4;
     --text-muted: #9c968c;
+    --text-faded: #8d8579;
     --text-dim: #6f6a63;
     --text-faint: #57515e;
 
-    /* Overridden on the shell root by the accent picker. */
+    /*
+      --accent is overridden on the shell root by the accent picker.
+      --accent-hover and --accent-dim are NOT overridden here: they are
+      derived from --accent on .shell below, so they follow whatever the
+      picker chooses. These four values are the fallback used before the
+      shell renders, and the mockup's own hand-picked amber record.
+    */
     --accent: #e0a355;
     --accent-hover: #f0bd7c;
     --accent-dim: #7a6a52;
@@ -53,6 +61,37 @@
     --dot-off: #3d3844;
 
     --placeholder: repeating-linear-gradient(135deg, #2b2833 0 6px, #232028 6px 12px);
+
+    /*
+      The mockup uses two hatches: this lighter one for small achievement
+      icons and queue covers, and the darker pair below for large covers
+      and the game screen's banner.
+    */
+    --placeholder-dark: repeating-linear-gradient(135deg, #232028 0 10px, #1d1b22 10px 20px);
+    --bg-hatch-dark: #1d1b22;
+}
+
+/*
+  --accent-hover and --accent-dim are relationships to --accent, not colours of
+  their own: the same hue at a fixed saturation and lightness ratio. Written
+  that way they reproduce the mockup's hand-picked amber to within 1/255 and
+  follow the other three accents too, so the picker really does rewrite one
+  variable and have everything follow.
+
+  These MUST be declared on .shell, not in :root. A custom property is resolved
+  where it is declared, and in :root --accent is always the default amber — so
+  a derivation placed there silently keeps the amber dim no matter what the
+  user picks. That is the exact bug being fixed here.
+
+  Guarded because an engine without relative colour would leave both tokens
+  invalid at computed-value time, which is worse than not following: the
+  :root values above then stand and behaviour is unchanged.
+*/
+@supports (color: hsl(from red h s l)) {
+    .shell {
+        --accent-hover: hsl(from var(--accent) h calc(s * 1.15) calc(l * 1.18));
+        --accent-dim:   hsl(from var(--accent) h calc(s * 0.30) calc(l * 0.66));
+    }
 }
 
 * { box-sizing: border-box; }

@@ -1,9 +1,10 @@
 @inherits LayoutComponentBase
+@implements IDisposable
 @inject ILibraryQuery Library
 @inject IUserPreferences Preferences
 @inject IClock Clock
 
-<div class="shell" style="--accent: @(Preferences.Accent ?? DefaultAccent)">
+<div class="shell" style="--accent: @(Preferences.Accent ?? AccentPalette.Default)">
     <nav class="sidebar">
         <div class="brand">
             <div class="name">Achievements</div>
@@ -21,16 +22,31 @@
         <SyncStatusCard Summary="_summary" />
     </nav>
 
-    <main class="content">
+    <main class="content" id="app-scroll">
         @Body
     </main>
 </div>
 
 @code {
-    /// <summary>Amber, matching the mockup's default.</summary>
-    public const string DefaultAccent = "#e0a355";
-
     private LibrarySummary _summary = new(0, 0, "", "");
 
-    protected override void OnInitialized() => _summary = Library.GetSummary(Clock.Now);
+    protected override void OnInitialized()
+    {
+        _summary = Library.GetSummary(Clock.Now);
+        Preferences.Changed += HandlePreferencesChanged;
+    }
+
+    // Changed carries no threading contract on the Core interface, and the
+    // shipping SqliteUserPreferences will be called from background sync
+    // work, not only from a click. Dispatching through InvokeAsync keeps
+    // StateHasChanged safe regardless of which context raised the event.
+    private void HandlePreferencesChanged() => InvokeAsync(StateHasChanged);
+
+    // Load-bearing, not cleanup for its own sake: IUserPreferences will be a
+    // singleton in the shipping host, so it outlives any one AppShell
+    // instance. A page that declares its own @layout destroys and recreates
+    // AppShell, and without unsubscribing here each recreation would leave
+    // the previous instance's handler attached, leaking one subscription per
+    // layout swap.
+    public void Dispose() => Preferences.Changed -= HandlePreferencesChanged;
 }

@@ -7,6 +7,13 @@ on:
   pull_request:
   workflow_dispatch:
 
+# Supersede in-flight runs when a newer commit arrives on the same ref: the
+# Windows publish job takes minutes, and a stale run's artifact is worthless.
+# Tag builds are exempt — a release must never be cancelled by a later push.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
+
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -16,6 +23,10 @@ jobs:
         with:
           dotnet-version: '10.0.x'
       - run: dotnet test SteamAchievements.Core.Tests --configuration Release --logger trx
+      - name: Build the component library
+        run: dotnet build SteamAchievements.UI --configuration Release
+      - name: Build the preview host
+        run: dotnet build SteamAchievements.Preview --configuration Release
 
   build-windows:
     runs-on: windows-latest
@@ -53,3 +64,24 @@ jobs:
         with:
           name: SteamAchievementsTracker-win-x64
           path: publish/
+
+  build-cli:
+    runs-on: windows-latest
+    needs: test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Publish self-contained CLI
+        run: >
+          dotnet publish SteamAchievements.Cli
+          --configuration Release
+          --runtime win-x64
+          --self-contained true
+          -p:DebugType=none
+          --output publish-cli
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SteamAchievementsTracker-Cli-win-x64
+          path: publish-cli/

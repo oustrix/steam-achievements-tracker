@@ -1,0 +1,37 @@
+@if (_failed || string.IsNullOrEmpty(Url))
+{
+    <div class="cover placeholder">
+        <span class="label num">@FallbackLabel</span>
+    </div>
+}
+else
+{
+    <img class="cover" src="@Url" alt="@FallbackLabel" loading="lazy" @onerror="() => _failed = true" />
+}
+
+@code {
+    [Parameter, EditorRequired] public string? Url { get; set; }
+    [Parameter] public string FallbackLabel { get; set; } = "";
+
+    private bool _failed;
+    private string? _attemptedUrl;
+
+    /// <summary>
+    /// Only a genuinely different URL clears the recorded failure: a new app id
+    /// means a new image, and the previous failure says nothing about it.
+    /// OnParametersSet also runs on every parent re-render with the parameters
+    /// unchanged, so clearing unconditionally would swap the placeholder back
+    /// for the same known-broken img, which errors, renders the placeholder,
+    /// and flips again on the next parent render — forever.
+    /// </summary>
+    protected override void OnParametersSet()
+    {
+        if (_attemptedUrl == Url)
+        {
+            return;
+        }
+
+        _attemptedUrl = Url;
+        _failed = false;
+    }
+}

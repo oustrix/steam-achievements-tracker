@@ -1,0 +1,94 @@
+.toolbar {
+    position: sticky;
+    top: 0;
+    z-index: 5;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    padding: 22px 30px 16px;
+    background: color-mix(in srgb, var(--bg-shell) 93%, transparent);
+    backdrop-filter: blur(8px);
+    border-bottom: 1px solid var(--border-subtle);
+}
+
+.headline { display: flex; align-items: flex-end; gap: 16px; flex-wrap: wrap; }
+
+.title-block { display: flex; flex-direction: column; gap: 5px; flex: 1; min-width: 240px; }
+.title-block h1 { margin: 0; font-size: 22px; font-weight: 600; letter-spacing: -0.02em; }
+.title-block p {
+    margin: 0;
+    font-size: 13px;
+    color: var(--text-muted);
+    max-width: 560px;
+    text-wrap: pretty;
+}
+
+.sorts { display: flex; gap: 6px; align-items: center; }
+
+.sort {
+    display: flex;
+    gap: 5px;
+    align-items: center;
+    font: inherit;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    padding: 6px 10px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--text-dim);
+    cursor: pointer;
+}
+
+.sort.on { background: var(--bg-active); color: var(--accent); }
+.arrow { width: 7px; display: inline-block; }
+
+.filters { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+
+.search {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: 1;
+    min-width: 240px;
+    max-width: 340px;
+    padding: 8px 12px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--bg-raised);
+}
+
+.glass {
+    width: 11px;
+    height: 11px;
+    border: 1.5px solid var(--text-dim);
+    border-radius: 11px;
+    flex: none;
+}
+
+.search input {
+    flex: 1;
+    background: transparent;
+    border: 0;
+    outline: none;
+    color: var(--text);
+    font: inherit;
+    font-size: 13px;
+}
+
+.playtime, .toggle {
+    font: inherit;
+    font-size: 12px;
+    padding: 9px 12px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--bg-raised);
+    color: var(--text-muted);
+    cursor: pointer;
+}
+
+.playtime:hover, .toggle:hover { border-color: var(--border-strong); color: var(--text); }
+.toggle.on { border-color: var(--warn-border); color: var(--accent); }
+
+.spacer { flex: 1; }
+.count { font-size: 11px; color: var(--text-dim); }

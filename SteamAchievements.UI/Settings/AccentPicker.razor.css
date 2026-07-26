@@ -1,0 +1,12 @@
+.picker { display: flex; gap: 8px; }
+
+.swatch {
+    width: 30px;
+    height: 30px;
+    border-radius: 8px;
+    border: 2px solid transparent;
+    cursor: pointer;
+}
+
+.swatch.on { border-color: var(--text); }
+.swatch:hover { border-color: var(--border-hover); }

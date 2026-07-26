@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    net10.0, not net10.0-windows: this tool exists to run on macOS (where
+    development happens) as well as Windows, against the real Steam Web API.
+    Referencing only Core keeps it free of any Windows-only API.
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>SteamAchievements.Cli</RootNamespace>
+    <InvariantGlobalization>true</InvariantGlobalization>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\SteamAchievements.Core\SteamAchievements.Core.csproj" />
+  </ItemGroup>
+
+</Project>

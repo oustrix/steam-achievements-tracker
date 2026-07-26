@@ -1,0 +1,27 @@
+.banner {
+    position: relative;
+    height: 230px;
+    /* The hatch shows through when header.jpg is missing: the darker of the
+       mockup's two placeholder hatches, reserved for large covers and this
+       banner. Small achievement icons fall back to the lighter one instead. */
+    background-color: var(--bg-hatch-dark);
+    background-image: var(--placeholder-dark);
+    background-size: cover;
+    background-position: center;
+}
+
+.back {
+    position: absolute;
+    top: 18px;
+    left: 24px;
+    font: inherit;
+    font-size: 12px;
+    padding: 7px 12px;
+    border-radius: 7px;
+    border: 1px solid var(--border-strong);
+    background: color-mix(in srgb, var(--bg-shell) 60%, transparent);
+    color: var(--text-secondary);
+    cursor: pointer;
+}
+
+.back:hover { color: var(--text); border-color: var(--border-hover); }

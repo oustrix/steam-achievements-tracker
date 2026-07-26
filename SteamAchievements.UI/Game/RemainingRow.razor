@@ -1,0 +1,24 @@
+<div class="row">
+    <div class="icon-slot">
+        <CoverImage Url="@Row.IconUrl" FallbackLabel="" />
+    </div>
+
+    <div class="text">
+        <span class="name @(Row.Hidden ? "hidden" : "")">@Row.Name</span>
+        <span class="desc">@Row.Description</span>
+    </div>
+
+    <div class="rarity">
+        <span class="num pct">@Row.PercentText</span>
+        <ProgressBar Percent="Row.RarityBarPercent" Color="var(--accent-dim)" />
+    </div>
+
+    <div class="cost">
+        <span class="num value">@Row.CostText</span>
+        <span class="micro">cost</span>
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public AchievementRow Row { get; set; } = default!;
+}

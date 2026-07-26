@@ -45,6 +45,8 @@ leak into Core — it breaks local development entirely.
 dotnet test SteamAchievements.Core.Tests   # the local feedback loop
 dotnet build SteamAchievements.Core        # quick type check
 dotnet format                               # before committing
+dotnet run --project SteamAchievements.Preview   # see the UI on macOS
+dotnet build SteamAchievements.UI                # type check the components
 ```
 
 Always name the test project. A bare `dotnet test` at the repository root
@@ -70,14 +72,21 @@ parsing, the logged-in account, the Steam API client and its error taxonomy, the
 public profile endpoint, SQLite storage, the sync planner and orchestrator, the
 sync state machine, onboarding, account administration, and the ranking formula.
 
-`SteamAchievements.UI` holds the Blazor components. `SteamAchievements.Preview`
-is a development-only host that renders them from macOS against fixtures.
+`SteamAchievements.UI` holds all six screens from the design mockup. They are
+developed and verified on macOS through `SteamAchievements.Preview`, a
+development-only Blazor Server host that renders the same components against
+fixtures — `dotnet run --project SteamAchievements.Preview`, then
+http://localhost:5100. Error and empty states are reachable there through
+`?scenario=empty|invalid-key|private-profile|rarity-unknown|other-account`.
+
 `SteamAchievements.Windows` is the real host: a WPF window with a
 `BlazorWebView`, plus the four Windows-only classes — registry, DPAPI, shell,
-WebView2 probe.
+WebView2 probe. Data lives in `%LOCALAPPDATA%\SteamAchievementsTracker\`:
+`library.db` and `apikey.bin`.
 
-Data lives in `%LOCALAPPDATA%\SteamAchievementsTracker\`: `library.db` and
-`apikey.bin`.
+Not wired yet: the buttons on the sync, settings and onboarding screens. The
+services behind them exist and are tested (`ISyncController`, `IOnboarding`,
+`IAccountAdmin`); binding the components to them is the next task.
 
 ## Facts learned the hard way
 
@@ -99,6 +108,17 @@ These cost real debugging time. Do not rediscover them.
   than one file.
 - **Steam's error responses are HTML, not JSON**, and a missing key returns 400
   or 401 depending on the endpoint. See `docs/steam-api.md`.
+- **The UI must not read through `GameRepository`.** It wraps the sync
+  engine's single connection, which is not thread-safe and is already
+  serialized behind a lock. `SqliteLibraryQuery` takes its own handle from
+  `Database.OpenRead`; WAL lets it read while a sync writes. Note that
+  `Mode=ReadOnly` is deliberately *not* used — a read-only SQLite connection to
+  a WAL database still needs write access to the shared-memory index file.
+- **`Virtualize` and `scrollIntoView` do not mix.** An off-screen row is not in
+  the DOM, so keyboard navigation scrolls by arithmetic instead:
+  `scrollTop = index * rowHeight`. That is why the queue row height is a fixed
+  constant duplicated between `QueuePage.razor` and its stylesheet — a
+  mismatch shows up as drift, not as an error.
 - **The publish check needs `-Recurse`.** `Get-ChildItem publish -File` does not
   see subdirectories, and both WebView2's loader and BlazorWebView's static
   assets publish into them. Without `-Recurse` the check passes green on an
@@ -118,6 +138,12 @@ These cost real debugging time. Do not rediscover them.
   swallowed error.
 - **A `<Router>` with no `<NotFound>` renders nothing.** Not an error, not a
   message — a blank window. The WPF host's `Routes.razor` carries one.
+- **The sync seam lives in `Core/Presentation`, not in `UI/State`.** It was
+  written in both places by two parallel branches. It has to be in Core: a seam
+  declared in the UI project cannot be implemented there, which would strand the
+  whole state machine in the WPF project. `SyncPhase` says what is happening,
+  `SyncProblem` says what is blocking, and they are deliberately separate — a
+  rejected key leaves the sync idle *and* blocked.
 
 ## Reviewing your own plans
 

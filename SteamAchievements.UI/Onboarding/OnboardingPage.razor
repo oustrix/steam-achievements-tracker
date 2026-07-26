@@ -1,0 +1,59 @@
+@page "/onboarding"
+
+<PageTitle>Getting started</PageTitle>
+
+<div class="page">
+    <StepIndicator Labels="@(new[] { "account", "key", "first sync" })" Current="2" />
+
+    <section class="card">
+        <div class="head">
+            <span class="title">Is this you?</span>
+            <span class="sub">Found in your local Steam installation — nothing was sent anywhere.</span>
+        </div>
+
+        <div class="account">
+            <div class="avatar"></div>
+            @* Placeholder values. The mockup shows a real account here; a real
+               SteamID64 must never be committed (CLAUDE.md), and these are
+               replaced by ISteamPathProvider in the Windows spec anyway. *@
+            <div class="who">
+                <span class="name">Your Steam account</span>
+                <span class="num id">76561190000000000</span>
+            </div>
+            <span class="spacer"></span>
+            <button class="primary" disabled>Yes, continue</button>
+        </div>
+
+        <button class="link" disabled>Enter a SteamID64 or profile URL instead</button>
+    </section>
+
+    <section class="card key">
+        <div class="head">
+            <span class="title">Paste your Steam Web API key</span>
+            <span class="sub bright">
+                The button opens Steam's key page — you are already signed in there. Copy the
+                key and this app picks it up from the clipboard on its own.
+            </span>
+        </div>
+
+        <div class="key-row">
+            <button class="primary" disabled>Open key page</button>
+            <div class="watching num">
+                <span class="dot"></span>watching clipboard for 32 hex characters
+            </div>
+        </div>
+
+        <div class="sub">
+            Steam only issues keys to accounts with at least $5 in purchases. If the page
+            refuses, that is why — not a problem with this app.
+        </div>
+    </section>
+
+    <section class="card dim">
+        <span class="title">First sync</span>
+        <span class="sub">
+            Roughly 9 minutes for 1 500 games, limited by Steam's rate limits. Later syncs
+            take seconds.
+        </span>
+    </section>
+</div>

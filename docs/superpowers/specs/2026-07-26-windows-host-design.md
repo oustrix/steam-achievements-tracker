@@ -691,7 +691,35 @@ Recorded during execution rather than reconstructed afterwards.
   artifact is `SteamAchievements.Windows.exe`. Renaming it would be nicer for a
   download but changes the isolated-CSS bundle name in `index.html` too; it is a
   cosmetic change and was left for its own commit.
+- **§5.1's phase model was replaced by the UI branch's, which is better.**
+  This spec proposed six phases with `KeyRejected` and `Failed` among them. The
+  UI branch, working in parallel, had already shipped `SyncPhase` (`Idle`,
+  `Running`, `Paused`, `CircuitOpen`) alongside a separate `SyncProblem`
+  (`None`, `InvalidKey`, `PrivateProfile`, `OtherAccount`), and its screens were
+  built against it. Splitting "what is happening" from "what is blocking" is the
+  right cut: a rejected key leaves the sync idle *and* blocked, and folding both
+  into one enum forces every future state to pick a side it does not belong on.
+
+  §5.1's *location* argument survived intact and decided the merge — the types
+  moved from `SteamAchievements.UI/State/` into `Core/Presentation`, because a
+  seam declared in the UI project cannot be implemented in Core, which would
+  have left the whole state machine in the WPF project. `IdleSyncPresenter` was
+  deleted; `SyncCoordinator` implements the seam directly.
+
+  `SyncStatusView` also carries `EtaText` and `RateText`, which the progress
+  card already rendered and this spec never mentioned. `SyncProgressReport` in
+  `Core/App` computes them, with tests for the degenerate cases — nothing
+  completed, no elapsed time, a total of zero.
+
+- **The screens' buttons are still inert.** `SyncPage`, `SettingsPage` and
+  `OnboardingPage` render real state through the unified seam, but their
+  controls remain `disabled`: binding them to `ISyncController`, `IOnboarding`
+  and `IAccountAdmin` is UI work in the components, deliberately left as its own
+  task rather than folded into the merge.
+
 - **Not verified on Windows yet.** Everything in §6, §7 and §10 is written but
   unexecuted. §9.1 is the checklist for the first push, and until it has been
   run this section cannot claim the host works — only that it compiles the parts
-  macOS can compile.
+  macOS can compile. `Database.ResetLibrary` running `VACUUM` while the reader
+  and writer connections are open belongs on that checklist: it passes
+  single-connection tests, but WAL behaves differently with live neighbours.

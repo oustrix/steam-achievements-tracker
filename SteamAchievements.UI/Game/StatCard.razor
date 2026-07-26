@@ -1,0 +1,12 @@
+<div class="stat">
+    <span class="value num" style="color: @ValueColor">@Value</span>
+    <span class="micro">@Label</span>
+    <span class="note">@Note</span>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public string Value { get; set; } = "";
+    [Parameter, EditorRequired] public string Label { get; set; } = "";
+    [Parameter] public string Note { get; set; } = "";
+    [Parameter] public string ValueColor { get; set; } = "var(--text)";
+}

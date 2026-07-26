@@ -105,13 +105,11 @@ public sealed class SqliteLibraryQuery : ILibraryQuery
         var lastSync = _connection.QuerySingleOrDefault<string?>(
             "SELECT last_full_sync_at FROM settings WHERE id = 1");
 
-        return new LibrarySummary(
+        return LibrarySummary.Build(
             games,
             achievements,
-            $"{Formatting.Number(games)} games · {Formatting.Number(achievements)} ach.",
-            lastSync is null
-                ? "Never synced"
-                : $"Last sync {Formatting.Relative(DateTimeOffset.Parse(lastSync), now)}");
+            lastSync is null ? null : DateTimeOffset.Parse(lastSync),
+            now);
     }
 
     public IReadOnlyList<SyncRunView> GetSyncHistory(int limit, DateTimeOffset now) =>
@@ -123,51 +121,12 @@ public sealed class SqliteLibraryQuery : ILibraryQuery
                    error         AS Error
             FROM sync_runs ORDER BY started_at DESC LIMIT @Limit
             """, new { Limit = limit })
-            .Select(r => Project(r, now))
+            .Select(r => new SyncRunView(
+                Formatting.Timestamp(DateTimeOffset.Parse(r.StartedAt), now),
+                SyncRunView.Describe(r.Kind, r.GamesSynced, r.Error),
+                Formatting.Duration(r.DurationMs),
+                SyncRunView.OutcomeOf(r.Error)))
             .ToList();
-
-    private static SyncRunView Project(SyncRunRow run, DateTimeOffset now)
-    {
-        // Decoded once and passed on. The sentinel that distinguishes a
-        // cancelled run from a failed one lives in the error column, so it must
-        // appear in exactly one place — two switches over the same magic string
-        // are two things to keep in agreement.
-        var outcome = run.Error switch
-        {
-            null => SyncRunOutcome.Completed,
-            SyncJournal.Cancelled => SyncRunOutcome.Cancelled,
-            _ => SyncRunOutcome.Failed,
-        };
-
-        return new SyncRunView(
-            Formatting.Timestamp(DateTimeOffset.Parse(run.StartedAt), now),
-            Describe(run, outcome),
-            Formatting.Duration(run.DurationMs),
-            outcome);
-    }
-
-    private static string Describe(SyncRunRow run, SyncRunOutcome outcome)
-    {
-        var count = Formatting.Number(run.GamesSynced);
-
-        if (outcome == SyncRunOutcome.Cancelled)
-        {
-            return $"Cancelled — {count} games";
-        }
-
-        if (outcome == SyncRunOutcome.Failed)
-        {
-            return $"Failed — {run.Error}";
-        }
-
-        return run.Kind switch
-        {
-            "full" => $"Full sync — {count} games",
-            "incremental" => $"Incremental — {count} games changed",
-            "schema" => $"Schema refresh — {count} games stale",
-            _ => $"{run.Kind} — {count} games",
-        };
-    }
 
     private static OwnedGame Game(GameRow row) => new(
         (uint)row.AppId, row.Name, string.Empty,

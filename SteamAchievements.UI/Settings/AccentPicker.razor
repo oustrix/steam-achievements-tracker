@@ -1,0 +1,17 @@
+<div class="picker">
+    @foreach (var (value, name) in AccentPalette.All)
+    {
+        <button class="swatch @(Selected == value ? "on" : "")"
+                style="background: @value"
+                title="@name"
+                aria-label="@name"
+                aria-pressed="@(Selected == value ? "true" : "false")"
+                @onclick="() => OnSelect.InvokeAsync(value)">
+        </button>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public string Selected { get; set; } = "";
+    [Parameter] public EventCallback<string> OnSelect { get; set; }
+}

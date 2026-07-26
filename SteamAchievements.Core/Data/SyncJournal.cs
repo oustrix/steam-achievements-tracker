@@ -1,5 +1,6 @@
 using Dapper;
 using Microsoft.Data.Sqlite;
+using SteamAchievements.Core.Presentation;
 
 namespace SteamAchievements.Core.Data;
 
@@ -24,9 +25,10 @@ public sealed class SyncJournal
     /// <summary>
     /// Stored in <c>sync_runs.error</c> for a run the user stopped. Pausing is
     /// cancel-and-resume, so a paused sync leaves one of these behind and the
-    /// history says so.
+    /// history says so. The value itself is declared on
+    /// <see cref="SyncRunView"/>, which is where the screen decodes it.
     /// </summary>
-    public const string Cancelled = "cancelled";
+    public const string Cancelled = SyncRunView.CancelledMarker;
 
     private readonly SqliteConnection _connection;
 

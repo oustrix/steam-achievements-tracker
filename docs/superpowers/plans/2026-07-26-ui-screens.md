@@ -1026,6 +1026,7 @@ public sealed record GameDetailView(
     string EffortLabel,
     int    Remaining,
     string RarestText,
+    bool   RarityUnknown,
     IReadOnlyList<AchievementRow> RemainingAchievements,
     IReadOnlyList<AchievementRow> UnlockedAchievements);
 ```
@@ -1088,6 +1089,7 @@ public static class GameDetailBuilder
             complete ? "complete" : QueueRowBuilder.EffortLabel(effort.RemainingEffort),
             effort.RemainingCount,
             double.IsNaN(rarestPercent) ? "unknown" : Formatting.Percent(rarestPercent),
+            effort.RarityUnknown,
             remaining,
             unlocked);
     }
@@ -2011,6 +2013,7 @@ Replace `SteamAchievements.UI/_Imports.razor` with:
 @using Microsoft.AspNetCore.Components.Routing
 @using Microsoft.AspNetCore.Components.Web
 @using Microsoft.AspNetCore.Components.Web.Virtualization
+@using Microsoft.JSInterop
 @using SteamAchievements.Core.Presentation
 @using SteamAchievements.UI.Layout
 @using SteamAchievements.UI.Shared
@@ -2089,10 +2092,15 @@ Create `SteamAchievements.UI/wwwroot/app.css`:
     --border: #2b2833;
     --border-strong: #3a3444;
     --border-hover: #544c60;
+    --border-selected: #4a4256;
 
     --text: #edeae3;
     --text-secondary: #c6bfb4;
     --text-muted: #9c968c;
+    /* Sits between muted and dim: text that is de-emphasised because it is
+       already resolved — a completed row's reason, a hidden achievement's
+       name, the clipboard hint. Recurs three times in the mockup. */
+    --text-faded: #8d8579;
     --text-dim: #6f6a63;
     --text-faint: #57515e;
 
@@ -2117,7 +2125,11 @@ Create `SteamAchievements.UI/wwwroot/app.css`:
     --bar-complete: #4c4650;
     --dot-off: #3d3844;
 
+    /* Two hatches, not one: small icons use the lighter pair, large covers and
+       the game banner the darker. Both come from the mockup. */
     --placeholder: repeating-linear-gradient(135deg, #2b2833 0 6px, #232028 6px 12px);
+    --placeholder-dark: repeating-linear-gradient(135deg, #232028 0 10px, #1d1b22 10px 20px);
+    --bg-hatch-dark: #1d1b22;
 }
 
 * { box-sizing: border-box; }
@@ -2367,7 +2379,20 @@ public sealed class FixtureLibraryQuery : ILibraryQuery
     private IReadOnlyList<FixtureGame> Source => Scenario switch
     {
         Scenario.Empty or Scenario.PrivateProfile or Scenario.InvalidKey => [],
-        Scenario.RarityUnknown => FixtureData.All.Where(g => g.Game.AppId == 435150).ToList(),
+        // Divinity with its rarity stripped entirely. Taking the game as-is
+        // would NOT reach this state: EffortCalculator reports RarityUnknown
+        // only when every achievement lacks a percentage, and Divinity has one
+        // for 33 of its 39 locked achievements. Without this the scenario
+        // would promise a state it never shows.
+        Scenario.RarityUnknown => FixtureData.All
+            .Where(g => g.Game.AppId == 435150)
+            .Select(g => g with
+            {
+                Achievements = g.Achievements
+                    .Select(a => a with { GlobalPercent = (double?)null })
+                    .ToList(),
+            })
+            .ToList(),
         _ => FixtureData.All,
     };
 
@@ -3132,7 +3157,13 @@ public sealed record QueueCriteria(
 /// </summary>
 public static class QueueFilter
 {
-    public static IReadOnlyList<QueueRow> Apply(IReadOnlyList<QueueRow> rows, QueueCriteria criteria)
+    /// <summary>
+    /// Returns List rather than IReadOnlyList because Blazor's Virtualize
+    /// binds its Items parameter to ICollection, which IReadOnlyList does not
+    /// satisfy. Declaring what this actually builds beats making the caller
+    /// downcast to an implementation detail.
+    /// </summary>
+    public static List<QueueRow> Apply(IReadOnlyList<QueueRow> rows, QueueCriteria criteria)
     {
         var query = criteria.Query.Trim();
 
@@ -3310,7 +3341,7 @@ Create `SteamAchievements.UI/Shared/CoverImage.razor.css`:
 }
 
 .placeholder {
-    background: repeating-linear-gradient(135deg, #232028 0 6px, #1d1b22 6px 12px);
+    background: repeating-linear-gradient(135deg, var(--border-subtle) 0 6px, var(--bg-hatch-dark) 6px 12px);
     display: flex;
     align-items: flex-end;
     padding: 6px;
@@ -3358,8 +3389,10 @@ Create `SteamAchievements.UI/Queue/QueueToolbar.razor`:
                    @oninput="e => State.SetQuery(e.Value?.ToString() ?? string.Empty)" />
         </div>
 
-        <select class="playtime" value="@State.Criteria.MinPlaytimeHours"
-                @onchange="e => State.SetMinPlaytime(int.Parse(e.Value?.ToString() ?? "0"))">
+        @* The handler is a method, not a lambda: a lambda here would need a
+           string literal inside a double-quoted Razor attribute, which does
+           not parse. *@
+        <select class="playtime" value="@State.Criteria.MinPlaytimeHours" @onchange="OnPlaytimeChanged">
             <option value="0">Min. playtime: any</option>
             <option value="1">Min. playtime: 1 h</option>
             <option value="5">Min. playtime: 5 h</option>
@@ -3392,6 +3425,9 @@ Create `SteamAchievements.UI/Queue/QueueToolbar.razor`:
 
     private string Arrow(QueueSort sort) =>
         State.Criteria.Sort != sort ? "" : State.Criteria.Descending ? "↓" : "↑";
+
+    private void OnPlaytimeChanged(ChangeEventArgs e) =>
+        State.SetMinPlaytime(int.TryParse(e.Value?.ToString(), out var hours) ? hours : 0);
 }
 ```
 
@@ -3555,7 +3591,7 @@ Create `SteamAchievements.UI/Queue/QueueRowCard.razor.css`:
     transition: background 120ms, border-color 120ms;
 }
 
-.row.selected { background: var(--bg-selected); border-color: #4a4256; }
+.row.selected { background: var(--bg-selected); border-color: var(--border-selected); }
 .row.done { opacity: 0.6; }
 
 .cover-slot { height: 96px; }
@@ -3575,7 +3611,7 @@ Create `SteamAchievements.UI/Queue/QueueRowCard.razor.css`:
 
 .counts { font-size: 11px; color: var(--text-dim); flex: none; }
 .reason { font-size: 13px; color: var(--text-secondary); }
-.row.done .reason { color: #8d8579; }
+.row.done .reason { color: var(--text-faded); }
 
 .effort {
     display: flex;
@@ -3627,7 +3663,7 @@ Replace `SteamAchievements.UI/Queue/QueuePage.razor`:
 
 @code {
     private QueueView _queue = new([], 0);
-    private IReadOnlyList<QueueRow> _rows = [];
+    private List<QueueRow> _rows = [];
     private double _maxEffort;
 
     protected override void OnInitialized()
@@ -3682,7 +3718,9 @@ Create `SteamAchievements.UI/Queue/QueuePage.razor.css`:
 Run: `dotnet run --project SteamAchievements.Preview` and open `http://localhost:5100`.
 
 Expected:
-- Thirteen rows (Celeste and Portal 2 hidden by the default "100 % complete: hidden"), Hollow Knight first with effort `4.2` and the line "1 left: one rare (2.1%)".
+- Twelve rows: fourteen fixture games less Celeste and Portal 2, hidden by the default "100 % complete: hidden".
+- Rows ascending by effort, least work first.
+- Hollow Knight reads `3 left, two below 5% of owners`. Note this is NOT the mockup's hand-written line for that game ("3 left: two common, one rare (2.1%)"). Its three locked achievements sit at 9.8%, 4.6% and 2.1%, and the agreed threshold makes a 4.6% achievement rare, so two of the three are. The mockup's own prose implies a threshold nearer 3% in that line while writing the phrase "below 5% of owners" in another — it is inconsistent, and the single rule wins. See spec section 5.2.
 - Real cover art for every game.
 - Clicking "Effort" flips the arrow to ↓ and puts Europa Universalis IV first.
 - Typing "knight" leaves one row; clearing it restores thirteen.
@@ -3802,7 +3840,7 @@ Replace `SteamAchievements.UI/Queue/QueuePage.razor`:
     private const float RowHeight = 130;
 
     private QueueView _queue = new([], 0);
-    private IReadOnlyList<QueueRow> _rows = [];
+    private List<QueueRow> _rows = [];
     private double _maxEffort;
     private ElementReference _list;
     private bool _focusPending = true;
@@ -4009,10 +4047,10 @@ Create `SteamAchievements.UI/Game/GameHeader.razor.css`:
 .banner {
     position: relative;
     height: 230px;
-    /* The hatch shows through when header.jpg is missing, which is the same
-       placeholder the queue covers fall back to. */
-    background-color: #1d1b22;
-    background-image: repeating-linear-gradient(135deg, #232028 0 10px, #1d1b22 10px 20px);
+    /* The hatch shows through when header.jpg is missing. It is the darker of
+       the mockup's two hatches — small achievement icons use the lighter one. */
+    background-color: var(--bg-hatch-dark);
+    background-image: var(--placeholder-dark);
     background-size: cover;
     background-position: center;
 }
@@ -4026,7 +4064,7 @@ Create `SteamAchievements.UI/Game/GameHeader.razor.css`:
     padding: 7px 12px;
     border-radius: 7px;
     border: 1px solid var(--border-strong);
-    background: rgba(20, 19, 23, 0.6);
+    background: color-mix(in srgb, var(--bg-shell) 60%, transparent);
     color: var(--text-secondary);
     cursor: pointer;
 }
@@ -4082,7 +4120,7 @@ Create `SteamAchievements.UI/Game/RemainingRow.razor.css`:
 .icon-slot { height: 48px; }
 .text { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
 .name { font-size: 14px; font-weight: 600; }
-.name.hidden { color: #8d8579; }
+.name.hidden { color: var(--text-faded); }
 
 .desc {
     font-size: 12px;
@@ -4185,7 +4223,7 @@ else
             </div>
         </div>
 
-        @if (_game.RarestText == "unknown" && _game.Remaining > 0)
+        @if (_game.RarityUnknown && _game.Remaining > 0)
         {
             <Notice Title="Rarity data unavailable">
                 <Body>
@@ -4281,11 +4319,11 @@ Run: `dotnet run --project SteamAchievements.Preview`, open `http://localhost:51
 Expected:
 - The real `header.jpg` banner with a "← Queue" button over it.
 - "Hollow Knight", "84 h played · last played 3 days ago", the progress bar, and "60 of 63 unlocked · 95%".
-- Two stat cards: `4.2` / "remaining effort" / "an evening", and `3` / "left" / "rarest 2.1%".
+- Two stat cards: `10.9` / "remaining effort" / "a few sessions", and `3` / "left" / "rarest 2.1%".
 - Remaining ordered cheapest first, ending with the hidden one, which reads "Hidden achievement" in a dimmed colour with the explanatory description.
 - Achievement icons all fall back to the hatch placeholder — the fixture URLs do not resolve on purpose, which is exactly the case worth seeing.
 - "← Queue" returns to the queue with Hollow Knight still selected and the sort unchanged.
-- Opening `http://localhost:5100/game/435150` (Divinity) shows the "Rarity data unavailable" notice.
+- Opening `http://localhost:5100/game/435150` (Divinity) does NOT show the "Rarity data unavailable" notice, and that is correct: Divinity has rarity for 33 of its 39 locked achievements. The notice means "Steam has no percentages for this game at all", which EffortCalculator reports as RarityUnknown only when every achievement lacks data. No fixture game is in that state yet — Task 13 gives the `rarity-unknown` scenario one, which is where this notice becomes visible.
 - Opening `http://localhost:5100/game/1` shows "That game is not in your library".
 
 - [ ] **Step 6: Commit**
@@ -4653,10 +4691,16 @@ Create `SteamAchievements.Preview/Components/ScenarioScope.razor` — preview-on
     {
         var query = QueryHelpers.ParseQuery(new Uri(Navigation.Uri).Query);
 
-        Library.Scenario = query.TryGetValue("scenario", out var value)
-            && Enum.TryParse<Scenario>(value.ToString().Replace("-", ""), ignoreCase: true, out var scenario)
-                ? scenario
-                : Scenario.Normal;
+        // Only reassign when the URL actually names a scenario. Blazor's
+        // internal navigation does not carry the query string, so resetting on
+        // its absence would drop you back to Normal the moment you clicked
+        // anything — which defeats the point of walking the app in one state.
+        // `?scenario=normal` is how you get back.
+        if (query.TryGetValue("scenario", out var value)
+            && Enum.TryParse<Scenario>(value.ToString().Replace("-", ""), ignoreCase: true, out var scenario))
+        {
+            Library.Scenario = scenario;
+        }
     }
 }
 ```
@@ -4694,7 +4738,7 @@ Run: `dotnet run --project SteamAchievements.Preview` and walk through these URL
 | `/sync?scenario=other-account` | The same card plus the amber "Paused after five consecutive failures" notice with a "Retry now" button |
 | `/sync?scenario=invalid-key` | "No sync running" with disabled buttons, the red "Steam rejected the API key" notice whose button opens Settings, the amber privacy notice, and "No syncs recorded yet." |
 | `/?scenario=empty` | "Nothing left to rank" |
-| `/?scenario=rarity-unknown` | One row, Divinity, reading "39 left, rarity unknown for six of them" |
+| `/?scenario=rarity-unknown` | One row, Divinity, reading "39 left, rarity unknown for all of them" — the scenario strips every percentage, so the whole game is unranked, which is the state the name promises |
 
 - [ ] **Step 6: Commit**
 
@@ -4954,12 +4998,38 @@ Run: `dotnet run --project SteamAchievements.Preview` and open `http://localhost
 
 Expected: clicking the blue swatch immediately turns the selected navigation dot, the effort figures on the queue and the progress bars blue. Navigating to the queue and back keeps it blue. Reloading the page resets it to amber, because the preview stores preferences in memory by design — the SQLite implementation is already tested in Task 5.
 
-If the colour changes on Settings but not on the queue, the shell is not re-rendering: `AppShell` reads `Preferences.Accent` during render, so a `StateHasChanged` on the layout is needed. Fix it by having `SettingsPage` call `StateHasChanged` on itself and confirming the layout re-renders on navigation; if it still lags, raise an event from `QueueState` — do not duplicate the accent into a second field.
+A Blazor layout does not re-render because a page inside it changed state, so
+`AppShell` — which reads `Preferences.Accent` during render — will not pick the
+new colour up on its own. `SettingsPage` calling `StateHasChanged` on itself
+does not help; it re-renders only itself.
+
+The seam therefore has to announce the change. Add to `IUserPreferences`:
+
+```csharp
+    /// <summary>
+    /// Raised after the accent changes. The shell renders the accent as a CSS
+    /// variable on its root, and a Blazor layout does not re-render when a page
+    /// inside it changes state — so without this the new colour would not
+    /// appear until the next navigation.
+    /// </summary>
+    event Action? Changed;
+```
+
+Raise it at the end of `SetAccent` in both implementations —
+`SqliteUserPreferences` in Core and `InMemoryUserPreferences` in the preview
+host. Then have `AppShell` implement `IDisposable`, subscribe in
+`OnInitialized` with a handler that calls `StateHasChanged`, and unsubscribe in
+`Dispose`. Do not duplicate the accent into a second field held by the shell;
+one source of truth, announced.
 
 - [ ] **Step 5: Commit**
 
+Step 4 changes the seam itself, so the commit spans three projects: without
+`IUserPreferences` and both implementations, the `AppShell` in this commit does
+not compile.
+
 ```bash
-git add -A SteamAchievements.UI
+git add -A SteamAchievements.UI SteamAchievements.Core SteamAchievements.Preview
 git commit -m "feat: build the settings screen with a working accent picker"
 ```
 
@@ -5098,7 +5168,11 @@ Create `SteamAchievements.UI/Onboarding/OnboardingPage.razor.css`:
     background: var(--bg-card);
 }
 
-.card.key { border-color: var(--warn-border); background: #1c1811; }
+/* The mockup paints this card #1c1811. That is (28,24,17) against --warn-bg's
+   (33,26,18) — at most 5/255 on a channel, which is not perceptible across a
+   card background. Reusing the token beats adding a near-duplicate to the
+   palette, since near-duplicate tokens are what make a palette hard to use. */
+.card.key { border-color: var(--warn-border); background: var(--warn-bg); }
 .card.dim { opacity: 0.55; gap: 12px; }
 
 .head { display: flex; flex-direction: column; gap: 5px; }
@@ -5161,7 +5235,7 @@ Create `SteamAchievements.UI/Onboarding/OnboardingPage.razor.css`:
     border-radius: 8px;
     border: 1px dashed var(--warn-border);
     background: var(--warn-bg);
-    color: #8d8579;
+    color: var(--text-faded);
 }
 
 .pulse { width: 7px; height: 7px; border-radius: 7px; background: var(--accent); flex: none; }
@@ -5224,11 +5298,11 @@ Run: `dotnet run --project SteamAchievements.Preview` and confirm each of these 
 
 | URL | Confirm |
 |---|---|
-| `/` | 13 rows, Hollow Knight first, real covers, "1 left: one rare (2.1%)" |
+| `/` | 12 rows, Undertale first, real covers, reasons in the `ReasonWriter` format ("5 left, one below 5% of owners"). Corrected after measurement: 14 fixtures minus Celeste and Portal 2, which `QueueCriteria.Default` hides, is 12; Undertale's effort of 8.9 sorts ahead of Hollow Knight's 10.9. The earlier "13 rows, Hollow Knight first, '1 left: one rare (2.1%)'" was copied from the mockup and never held — no fixture has fewer than three achievements left, and that colon-and-percentage phrasing is not a shape `ReasonWriter` produces. |
 | `/` | Sort buttons flip direction; search narrows; playtime filter applies; complete-toggle shows Celeste and Portal 2 dimmed |
 | `/` | ↑↓ move the selection and scroll it into view; Enter opens the game |
 | `/game/367520` | Banner, two stat cards, remaining cheapest-first, hidden achievement explained |
-| `/game/435150` | "Rarity data unavailable" notice |
+| `/game/435150?scenario=rarity-unknown` | "Rarity data unavailable" notice. The scenario is required: the fixture's Divinity has rarity for most of its locked achievements, so the plain URL correctly shows percentages and no notice. Verified — the plain URL does not render the notice. |
 | `/game/1` | "That game is not in your library" |
 | `/sync` | Progress card, four history rows |
 | `/sync?scenario=invalid-key` | Two notices, "No syncs recorded yet.", disabled buttons |

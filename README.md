@@ -29,45 +29,55 @@ how hard they are matter more than the ratio. This tool ranks your library by
 
 ## How the ranking works
 
-Every locked achievement gets a cost derived from its global rarity,
-normalized against the most common achievement in that same game:
+Every locked achievement is priced by how rare it is, measured two ways at once:
 
 ```
-relative(a)  = percent(a) / max(percent in this game)
-cost(a)      = -log2(relative(a))
-effort(game) = sum of cost over locked achievements
+relative = percent / (highest percent in this same game)
+absolute = percent / 100
+
+cost     = -log2(relative) + 0.5 × (-log2(absolute))
 ```
 
-That normalization matters. Steam computes global percentages across
-**everyone who owns a game, including people who never launched it** — so a
-tutorial achievement can sit at 40% and mean nothing. Comparing raw
-percentages between titles is misleading; comparing them against the game's
-own baseline is not.
+A game's effort is the sum over its locked achievements. Lower is easier.
 
-### What it deliberately does not do
+Both halves are needed. Steam computes rarity across **everyone who owns a game,
+including people who never launched it**, so raw percentages measure popularity
+as much as difficulty — hence the relative term, which compares each achievement
+against its own game's easiest. But relative alone collapses when a game's
+achievements are all similarly rare: measured on a real library, a game whose
+every achievement is held by 2% of owners scored as the **easiest of 396 games**,
+because there was no crowd to normalize against. The absolute term fixes that.
 
-It does not tell you an achievement is "impossible". A low global percentage
-looks like difficulty but usually is not: achievements are often added years
-after release, when most owners have already stopped playing, and many are rare
-only because nobody stumbles into them while playing normally — twenty minutes
-if you actually go for them.
+You get two lists, because "what should I finish?" and "what should I start?"
+are different questions: **finish what you started** (something already
+unlocked) and **start something new**.
 
-One number cannot separate "brutally hard" from "added late" from "nobody
-tries". So rarity is shown to you as a number, and the judgement stays yours.
-Guessing here and guessing wrong would mean telling you to abandon a game you
-would have finished in an evening.
+It never tells you an achievement is impossible — a low percentage usually means
+the achievement was added years after release, or that nobody stumbles into it
+by accident, not that it is hard. One number cannot separate those, so rarity is
+shown to you and the judgement stays yours.
+
+**→ [The full reasoning, with real numbers, is in `docs/ranking.md`](docs/ranking.md)** —
+why each term exists, why the weight is ½, what was tried and removed, and the
+known limitations.
 
 ## What it does
 
 - Pulls your full Steam library and achievement progress
-- Ranks games by remaining effort, with a plain-language reason for each
-  position — *"3 left: two common, one rare (2.1%)"*
+- Two ranked lists — *finish what you started* and *start something new* — each
+  with a plain-language reason for every position, such as
+  *"3 left, rarest 5.6%"*
 - Per-game view: what is left, sorted easiest first, with rarity for each
 - Works offline once synced — everything is cached locally in SQLite
 
 ## Requirements
 
 - Windows 10 or 11
+- The Microsoft Edge WebView2 runtime. It ships with Microsoft Edge and is
+  already present on almost every up-to-date Windows installation; if it is
+  missing, the application says so on startup and links to the installer
+  rather than showing an empty window. It can also be installed ahead of time
+  from <https://developer.microsoft.com/microsoft-edge/webview2/>.
 - A Steam account with **Game details set to Public** (otherwise Steam's API
   returns nothing, even to you)
 - A free Steam Web API key — Steam only issues these to accounts with at least
@@ -80,7 +90,8 @@ would have finished in an evening.
 2. The app finds your SteamID automatically from your local Steam
    installation and asks you to confirm it is you.
 3. Click the button to open the API key page — you are already signed in
-   there. Copy the key; the app picks it up from your clipboard on its own.
+   there. Copy the key and paste it into the field; the app checks it against
+   Steam before storing it.
 4. First sync takes a while for large libraries (roughly 9 minutes for 1500
    games, limited by Steam's rate limits). Later syncs take seconds.
 
@@ -101,7 +112,7 @@ API and Steam's image CDN.
 ## Building from source
 
 ```bash
-dotnet test SteamAchievements.Core.Tests    # 74 logic tests, run anywhere
+dotnet test SteamAchievements.Core.Tests    # 76 logic tests, run anywhere
 dotnet publish SteamAchievements.Windows -r win-x64 -c Release   # Windows only
 ```
 
@@ -126,22 +137,10 @@ Deliberately out of scope for the first release, in rough order of likelihood:
   answer "is this still obtainable?" — far future, see the
   [design doc](docs/specs/2026-07-26-steam-achievements-tracker-design.md)
 
-## Requirements
-
-Windows 10 or 11, and the Microsoft Edge WebView2 runtime.
-
-WebView2 ships with Microsoft Edge and is present on almost every up-to-date
-Windows installation. If it is missing, the application says so on startup and
-links to the installer rather than showing an empty window. It can also be
-installed ahead of time from
-<https://developer.microsoft.com/microsoft-edge/webview2/>.
-
-The application is distributed as a single unsigned `.exe`. SmartScreen will
-warn about it on first run; that is expected, and the reasoning is in the design
-document under "Explicitly out of scope".
-
 ## Documentation
 
+- [How the ranking works](docs/ranking.md) — the formula, the reasoning
+  behind each term, and what was deliberately left out
 - [Design document](docs/specs/2026-07-26-steam-achievements-tracker-design.md) —
   architecture and the reasoning behind each decision
 - [Steam API reference](docs/steam-api.md) — endpoint behaviour verified

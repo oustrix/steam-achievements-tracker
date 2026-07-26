@@ -1,0 +1,37 @@
+@using Microsoft.AspNetCore.WebUtilities
+@using SteamAchievements.Preview.Fixtures
+@implements IDisposable
+@inject FixtureLibraryQuery Library
+@inject NavigationManager Navigation
+
+@ChildContent
+
+@code {
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    protected override void OnInitialized()
+    {
+        Navigation.LocationChanged += OnLocationChanged;
+        Apply();
+    }
+
+    public void Dispose() => Navigation.LocationChanged -= OnLocationChanged;
+
+    private void OnLocationChanged(object? sender, LocationChangedEventArgs e) => Apply();
+
+    private void Apply()
+    {
+        var query = QueryHelpers.ParseQuery(new Uri(Navigation.Uri).Query);
+
+        // Only reassign when the URL actually names a scenario. Blazor's
+        // internal navigation does not carry the query string, so resetting on
+        // its absence would drop you back to Normal the moment you clicked
+        // anything — which defeats the point of walking the app in one state.
+        // `?scenario=normal` is how you get back.
+        if (query.TryGetValue("scenario", out var value)
+            && Enum.TryParse<Scenario>(value.ToString().Replace("-", ""), ignoreCase: true, out var scenario))
+        {
+            Library.Scenario = scenario;
+        }
+    }
+}

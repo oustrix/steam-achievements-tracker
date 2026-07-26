@@ -1,21 +1,39 @@
 namespace SteamAchievements.Core.Presentation;
 
 /// <summary>
-/// Every distinction the screens need about the sync, and no more.
+/// What the sync is doing right now.
 ///
 /// <c>Paused</c> and <c>Idle</c> are both "not running" — the difference is
-/// whether the user stopped it intending to come back, which decides whether the
-/// button says "Resume" or "Sync". <c>KeyRejected</c> is kept apart from
-/// <c>Failed</c> because it is the one failure with an action attached to it.
+/// whether the user stopped it intending to come back, which decides whether
+/// the button says "Resume" or "Sync".
 /// </summary>
 public enum SyncPhase
 {
-    NeverRun,
     Idle,
     Running,
     Paused,
-    Failed,
-    KeyRejected,
+    CircuitOpen,
+}
+
+/// <summary>
+/// A condition that stops the library from being synced, as opposed to
+/// something that went wrong during a run. Each value names one of the Notice
+/// blocks the sync screen renders. It is stated explicitly because it cannot be
+/// inferred: an empty library means a rejected key, a private profile, a
+/// different account signed in, or simply that nobody has synced yet — which is
+/// the state every new installation starts in.
+///
+/// Kept apart from <see cref="SyncPhase"/> on purpose. "What is happening" and
+/// "what is blocking" are orthogonal: a rejected key leaves the sync idle
+/// <em>and</em> blocked, and folding the two into one enum forces every future
+/// state to pick a side it does not belong on.
+/// </summary>
+public enum SyncProblem
+{
+    None,
+    InvalidKey,
+    PrivateProfile,
+    OtherAccount,
 }
 
 public sealed record SyncStatusView(
@@ -23,45 +41,20 @@ public sealed record SyncStatusView(
     int Completed,
     int Total,
     string CurrentGame,
-    string Headline,
-    string? Detail,
-    string? Error)
+    string EtaText,
+    string RateText,
+    string? AlertTitle,
+    string? AlertBody,
+    SyncProblem Problem = SyncProblem.None)
 {
-    /// <summary>
-    /// Named constructors, so a caller states only what differs and every
-    /// user-facing string in this file appears exactly once. Spelling the
-    /// seven-argument constructor out at each call site put the same two
-    /// sentences in two places apiece, where changing the copy meant grepping
-    /// and hoping.
-    /// </summary>
-    public static SyncStatusView NeverRun() =>
-        new(SyncPhase.NeverRun, 0, 0, "", "Never synced", null, null);
+    public static SyncStatusView Idle { get; } =
+        new(SyncPhase.Idle, 0, 0, "", "", "", null, null);
 
-    public static SyncStatusView Idle(int completed = 0, int total = 0) =>
-        new(SyncPhase.Idle, completed, total, "", "Up to date", null, null);
-
-    public static SyncStatusView Starting() =>
-        new(SyncPhase.Running, 0, 0, "", "Starting…", null, null);
-
-    public static SyncStatusView Running(int completed, int total, string game) =>
-        new(SyncPhase.Running, completed, total, game, $"Syncing {completed} of {total}", game, null);
-
-    public static SyncStatusView Paused(int completed, int total) =>
-        new(SyncPhase.Paused, completed, total, "", $"Paused at {completed} of {total}", null, null);
-
-    public static SyncStatusView Cancelled(int completed, int total) =>
-        new(SyncPhase.Idle, completed, total, "", "Sync cancelled", null, null);
-
-    public static SyncStatusView KeyRejected(int completed = 0, int total = 0, string? error = null) =>
-        new(SyncPhase.KeyRejected, completed, total, "",
-            "Steam rejected the API key", "Replace it in settings to continue.", error);
-
-    public static SyncStatusView Failed(int completed, int total, string error) =>
-        new(SyncPhase.Failed, completed, total, "", "Sync failed", null, error);
+    public int Percent => Total == 0 ? 0 : (int)Math.Round(100.0 * Completed / Total);
 }
 
 /// <summary>
-/// What the sidebar card and the sync screen read.
+/// What the sync screen and the sidebar card read.
 ///
 /// <c>Changed</c> is raised from whichever thread the sync engine's progress
 /// callback runs on, which is a worker thread, not the renderer. Components

@@ -1,0 +1,65 @@
+@page "/settings"
+@using SteamAchievements.Core.Sync
+@inject IUserPreferences Preferences
+@inject ILibraryQuery Library
+@inject IClock Clock
+
+<PageTitle>Settings</PageTitle>
+
+<div class="page">
+    <h1>Settings</h1>
+
+    <div class="account">
+        <div class="avatar"></div>
+        <div class="who">
+            <span class="name">Not signed in yet</span>
+            <span class="num id">Detected from loginusers.vdf during onboarding</span>
+        </div>
+        <span class="spacer"></span>
+        <button class="secondary" disabled>Change account</button>
+    </div>
+
+    <div class="block">
+        <div class="label">Steam Web API key</div>
+        <div class="key-row">
+            <div class="num key">Not stored yet</div>
+            <button class="secondary" disabled>Replace</button>
+        </div>
+        <div class="hint">Encrypted with Windows DPAPI for this user account. Never stored in plaintext.</div>
+    </div>
+
+    <div class="block">
+        <div class="label">Appearance</div>
+        <AccentPicker Selected="@Accent" OnSelect="Choose" />
+        <div class="hint">Changes the accent used for effort figures, progress and selection.</div>
+    </div>
+
+    <div class="block">
+        <div class="label">Cache</div>
+        <CacheRow Name="Achievement schema" Note="Rarely changes after release"
+                  Value="@($"{SyncOptions.Default.SchemaTtl.TotalDays:0} days")" />
+        <CacheRow Name="Global rarity percentages" Note="Drifts slowly as more people play"
+                  Value="@($"{SyncOptions.Default.GlobalTtl.TotalDays:0} days")" />
+        <div class="hint">These are the sync engine's own decisions and are shown, not edited.</div>
+    </div>
+
+    <div class="block">
+        <div class="label">Local data</div>
+        <Notice Severity="NoticeSeverity.Danger" Title="Reset database" ActionLabel="Reset">
+            <Body>
+                Deletes @Formatting.Number(_summary.AchievementCount) cached achievements and all
+                snapshots. The next sync starts from nothing.
+            </Body>
+        </Notice>
+    </div>
+</div>
+
+@code {
+    private LibrarySummary _summary = new(0, 0, "", "");
+
+    private string Accent => Preferences.Accent ?? AccentPalette.Default;
+
+    protected override void OnInitialized() => _summary = Library.GetSummary(Clock.Now);
+
+    private void Choose(string accent) => Preferences.SetAccent(accent);
+}

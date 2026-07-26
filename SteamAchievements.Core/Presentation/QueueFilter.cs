@@ -9,10 +9,10 @@ public enum QueueSort
 
 public sealed record QueueCriteria(
     QueueSort Sort,
-    bool      Descending,
-    string    Query,
-    int       MinPlaytimeHours,
-    bool      HideComplete)
+    bool Descending,
+    string Query,
+    int MinPlaytimeHours,
+    bool HideComplete)
 {
     public static QueueCriteria Default { get; } =
         new(QueueSort.Effort, Descending: false, Query: "", MinPlaytimeHours: 0, HideComplete: true);
@@ -25,7 +25,7 @@ public sealed record QueueCriteria(
 /// </summary>
 public static class QueueFilter
 {
-    public static IReadOnlyList<QueueRow> Apply(IReadOnlyList<QueueRow> rows, QueueCriteria criteria)
+    public static List<QueueRow> Apply(IReadOnlyList<QueueRow> rows, QueueCriteria criteria)
     {
         var query = criteria.Query.Trim();
 

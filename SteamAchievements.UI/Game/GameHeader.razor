@@ -1,0 +1,11 @@
+<div class="banner" style="background-image: url('@BannerUrl')">
+    <button class="back" @onclick="OnBack">← Queue</button>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public uint AppId { get; set; }
+    [Parameter] public EventCallback OnBack { get; set; }
+
+    private string BannerUrl =>
+        $"https://cdn.cloudflare.steamstatic.com/steam/apps/{AppId}/header.jpg";
+}

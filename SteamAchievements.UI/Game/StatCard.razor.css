@@ -1,0 +1,13 @@
+.stat {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    min-width: 130px;
+    padding: 14px 18px;
+    border: 1px solid var(--border-subtle);
+    border-radius: 10px;
+    background: var(--bg-card);
+}
+
+.value { font-size: 22px; line-height: 1; }
+.note { font-size: 12px; color: var(--text-muted); }

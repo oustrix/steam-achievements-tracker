@@ -1,12 +1,169 @@
 @page "/"
+@implements IDisposable
 @inject ILibraryQuery Library
 @inject IClock Clock
+@inject QueueState State
+@inject NavigationManager Navigation
+@inject IJSRuntime Js
 
-<h1>Completion queue</h1>
-<p class="num">@_queue.Rows.Count of @_queue.TotalGames games</p>
+<PageTitle>Completion queue</PageTitle>
+
+<QueueToolbar State="State" Shown="_rows.Count" Total="_queue.TotalGames" />
+
+<div class="list" id="queue-list" tabindex="0" @ref="_list" @onkeydown="OnKeyDown">
+    @if (_rows.Count == 0)
+    {
+        <EmptyState Title="@EmptyTitle" Body="@EmptyBody" />
+    }
+    else
+    {
+        <Virtualize TItem="QueueRow" Items="_rows" Context="row" ItemSize="RowHeight" OverscanCount="4">
+            <div class="slot">
+                <QueueRowCard Row="row"
+                              BarPercent="QueueRowBuilder.EffortBarPercent(row.Effort, _maxEffort)"
+                              Selected="State.SelectedAppId == row.AppId"
+                              OnOpen="() => Open(row.AppId)"
+                              OnSelect="() => State.Select(row.AppId)" />
+            </div>
+        </Virtualize>
+    }
+</div>
 
 @code {
+    /// <summary>
+    /// Must match .slot in the stylesheet exactly: 96px cover + 12px padding
+    /// top and bottom + 1px border each side + 8px gap. Virtualize positions
+    /// rows from this number and the scroll helper computes offsets from it,
+    /// so a mismatch shows up as drift rather than as an error.
+    /// </summary>
+    private const float RowHeight = 130;
+
     private QueueView _queue = new([], 0);
 
-    protected override void OnInitialized() => _queue = Library.GetQueue(Clock.Now);
+    // List<QueueRow>, not IReadOnlyList<QueueRow>: Virtualize's Items parameter
+    // requires ICollection<TItem>, which QueueFilter.Apply's return type
+    // provides directly.
+    private List<QueueRow> _rows = [];
+    private double _maxEffort;
+    private ElementReference _list;
+    private bool _focusPending = true;
+
+    protected override void OnInitialized()
+    {
+        _queue = Library.GetQueue(Clock.Now);
+        State.CriteriaChanged += Refresh;
+        State.SelectionChanged += Rerender;
+        Refresh();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            // Suppresses the browser's default scroll for the keys this list
+            // already handles, so pressing Down moves the selection instead
+            // of moving the selection and scrolling the page underneath it.
+            await Js.InvokeVoidAsync("queueScroll.attach", _list);
+        }
+
+        // Focus once so the arrow keys work without the user clicking first,
+        // including when arriving back here from a game screen.
+        if (_focusPending)
+        {
+            _focusPending = false;
+            await _list.FocusAsync();
+        }
+    }
+
+    public void Dispose()
+    {
+        State.CriteriaChanged -= Refresh;
+        State.SelectionChanged -= Rerender;
+    }
+
+    /// <summary>
+    /// The response to a selection change. Which rows are visible and how the
+    /// effort bars scale are both unaffected by it, so this deliberately does
+    /// not re-run the filter: a mouse sweep down the list raises one selection
+    /// change per row crossed, and filtering the whole library that often is
+    /// the difference between a smooth list and a stuttering one.
+    /// </summary>
+    private void Rerender() => StateHasChanged();
+
+    private void Refresh()
+    {
+        _rows = QueueFilter.Apply(_queue.Rows, State.Criteria);
+
+        // The bar scale is relative to what is on screen, so it is recomputed
+        // whenever the filter changes rather than baked into the row.
+        _maxEffort = _rows.Count == 0 ? 0 : _rows.Max(r => r.Effort);
+
+        StateHasChanged();
+    }
+
+    private async Task OnKeyDown(KeyboardEventArgs e)
+    {
+        if (_rows.Count == 0)
+        {
+            return;
+        }
+
+        var current = Math.Max(0, IndexOfSelected());
+
+        switch (e.Key)
+        {
+            case "ArrowDown":
+                await MoveTo(Math.Min(_rows.Count - 1, current + 1));
+                break;
+
+            case "ArrowUp":
+                await MoveTo(Math.Max(0, current - 1));
+                break;
+
+            case "Enter":
+                Open(_rows[current].AppId);
+                break;
+        }
+    }
+
+    private int IndexOfSelected()
+    {
+        if (State.SelectedAppId is not { } id)
+        {
+            return -1;
+        }
+
+        // A plain loop rather than LINQ: this runs on every arrow keypress
+        // over a list that can hold 1500 rows, and Select/FindIndex would
+        // allocate a copy each time.
+        for (var i = 0; i < _rows.Count; i++)
+        {
+            if (_rows[i].AppId == id)
+            {
+                return i;
+            }
+        }
+
+        return -1;
+    }
+
+    private async Task MoveTo(int index)
+    {
+        State.Select(_rows[index].AppId);
+        await Js.InvokeVoidAsync("queueScroll.toIndex", index, RowHeight);
+    }
+
+    private void Open(uint appId)
+    {
+        State.Select(appId);
+        Navigation.NavigateTo($"game/{appId}");
+    }
+
+    private string EmptyTitle => _queue.Rows.Count == 0
+        ? "Nothing left to rank"
+        : "No games match those filters";
+
+    private string EmptyBody => _queue.Rows.Count == 0
+        ? "Every game with achievements in your library is at 100 %. Play something new, then sync."
+        : "Widen the search or lower the minimum playtime.";
 }

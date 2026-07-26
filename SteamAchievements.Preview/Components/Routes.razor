@@ -1,11 +1,14 @@
 @using SteamAchievements.UI.Layout
+@using SteamAchievements.Preview.Components
 
 @* Routable components live in the RCL, so the router has to be told to look
    there as well as in this assembly. *@
-<Router AppAssembly="typeof(Program).Assembly"
-        AdditionalAssemblies="new[] { typeof(AppShell).Assembly }">
-    <Found Context="routeData">
-        <RouteView RouteData="routeData" DefaultLayout="typeof(AppShell)" />
-        <FocusOnNavigate RouteData="routeData" Selector="h1" />
-    </Found>
-</Router>
+<ScenarioScope>
+    <Router AppAssembly="typeof(Program).Assembly"
+            AdditionalAssemblies="new[] { typeof(AppShell).Assembly }">
+        <Found Context="routeData">
+            <RouteView RouteData="routeData" DefaultLayout="typeof(AppShell)" />
+            <FocusOnNavigate RouteData="routeData" Selector="h1" />
+        </Found>
+    </Router>
+</ScenarioScope>

@@ -12,9 +12,10 @@ public class SyncCoordinatorTests
     private static readonly DateTimeOffset Start = new(2026, 7, 26, 10, 0, 0, TimeSpan.Zero);
 
     /// <summary>
-    /// Every run reads the clock exactly twice — once when it starts, once when
-    /// it ends — so a clock that advances one second per read makes every
-    /// recorded duration exactly 1000 ms.
+    /// Advances a second per read, so elapsed time is non-zero and ordered
+    /// without any test having to wait. How many times a run reads it is an
+    /// implementation detail — it changes when progress reporting does — so
+    /// assertions below check ordering rather than counting seconds.
     /// </summary>
     private sealed class SteppingClock
     {
@@ -72,18 +73,19 @@ public class SyncCoordinatorTests
     }
 
     [Fact]
-    public void ReportsNeverRunBeforeTheFirstSync()
+    public void StartsIdleAndUnblocked()
     {
         var (coordinator, connection, _) = Build(new FakeSyncRunner((_, _) => Task.CompletedTask));
         using (connection)
         using (coordinator)
         {
-            Assert.Equal(SyncPhase.NeverRun, coordinator.Status.Phase);
+            Assert.Equal(SyncPhase.Idle, coordinator.Status.Phase);
+            Assert.Equal(SyncProblem.None, coordinator.Status.Problem);
         }
     }
 
     [Fact]
-    public void ReportsIdleWhenAPreviousSyncAlreadySucceeded()
+    public void DoesNotTreatAPreviousSuccessfulSyncAsAProblem()
     {
         var connection = Database.Open(":memory:");
         var accounts = new SqliteAccountStore(connection);
@@ -97,11 +99,12 @@ public class SyncCoordinatorTests
                    new FakeSyncRunner((_, _) => Task.CompletedTask), accounts, journal, clock.Read))
         {
             Assert.Equal(SyncPhase.Idle, coordinator.Status.Phase);
+            Assert.Equal(SyncProblem.None, coordinator.Status.Problem);
         }
     }
 
     [Fact]
-    public void ReportsKeyRejectedAtStartupWhenTheFlagIsSet()
+    public void ReportsARejectedKeyAtStartupWhenTheFlagIsSet()
     {
         var (coordinator, connection, accounts) = Build(new FakeSyncRunner((_, _) => Task.CompletedTask));
         using (connection)
@@ -113,7 +116,7 @@ public class SyncCoordinatorTests
             using var fresh = new SyncCoordinator(
                 new FakeSyncRunner((_, _) => Task.CompletedTask), accounts, new SyncJournal(connection), clock.Read);
 
-            Assert.Equal(SyncPhase.KeyRejected, fresh.Status.Phase);
+            Assert.Equal(SyncProblem.InvalidKey, fresh.Status.Problem);
         }
     }
 
@@ -160,7 +163,10 @@ public class SyncCoordinatorTests
             var run = new SqliteLibraryQuery(connection).GetSyncHistory(10, Start.AddHours(1)).Single();
             Assert.Equal(SyncRunOutcome.Completed, run.Outcome);
             Assert.Contains("Full sync", run.WhatText);
-            Assert.Equal(Start.AddSeconds(1), new SyncJournal(connection).LastSyncedAt);
+
+            // The rule is "a successful run records when it finished", not any
+            // particular number of clock ticks.
+            Assert.True(new SyncJournal(connection).LastSyncedAt > Start);
         }
     }
 
@@ -273,7 +279,7 @@ public class SyncCoordinatorTests
             coordinator.Start(force: false);
             await coordinator.Completion;
 
-            Assert.Equal(SyncPhase.KeyRejected, coordinator.Status.Phase);
+            Assert.Equal(SyncProblem.InvalidKey, coordinator.Status.Problem);
             Assert.Equal(400, coordinator.Status.Completed);
             Assert.NotNull(accounts.KeyRejectedAt);
             Assert.Equal(
@@ -311,8 +317,9 @@ public class SyncCoordinatorTests
             coordinator.Start(force: false);
             await coordinator.Completion;
 
-            Assert.Equal(SyncPhase.Failed, coordinator.Status.Phase);
-            Assert.Equal("Steam returned 503.", coordinator.Status.Error);
+            Assert.Equal(SyncProblem.None, coordinator.Status.Problem);
+            Assert.Equal("Sync failed", coordinator.Status.AlertTitle);
+            Assert.Equal("Steam returned 503.", coordinator.Status.AlertBody);
             Assert.Null(accounts.KeyRejectedAt);
         }
     }
@@ -350,7 +357,7 @@ public class SyncCoordinatorTests
             coordinator.Start(force: false);
             await coordinator.Completion;
 
-            Assert.Equal(SyncPhase.Failed, coordinator.Status.Phase);
+            Assert.Equal("No Steam account is configured", coordinator.Status.AlertTitle);
             Assert.Empty(new SqliteLibraryQuery(connection).GetSyncHistory(10, Start.AddHours(1)));
         }
     }

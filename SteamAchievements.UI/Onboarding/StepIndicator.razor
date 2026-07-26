@@ -1,0 +1,24 @@
+<div class="steps micro" role="list" aria-label="Onboarding progress">
+    @for (var i = 0; i < Labels.Length; i++)
+    {
+        if (i > 0)
+        {
+            <span aria-hidden="true">—</span>
+        }
+        <span role="listitem" class="@(i < Current ? "done" : null)" aria-current="@(IsCurrentStep(i) ? "step" : null)">@(i + 1) @Labels[i]</span>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public string[] Labels { get; set; } = [];
+
+    /// <summary>How many steps are reached; those before it are shown in the accent.</summary>
+    [Parameter] public int Current { get; set; }
+
+    // The step the user is on, not the next one: Current is a count of steps
+    // reached, so the current step is at index Current - 1. Guarded so
+    // nothing is marked when Current is 0 (nothing reached yet) or exceeds
+    // the label count (Current saturates past the last step and is never
+    // used as an index elsewhere).
+    private bool IsCurrentStep(int i) => Current >= 1 && Current <= Labels.Length && i == Current - 1;
+}

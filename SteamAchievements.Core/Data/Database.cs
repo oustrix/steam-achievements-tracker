@@ -5,11 +5,34 @@ namespace SteamAchievements.Core.Data;
 
 public static class Database
 {
+    /// <summary>
+    /// Shared by every writable connection so they cannot drift apart. See
+    /// <see cref="Open"/> for why each pragma is set the way it is.
+    /// </summary>
+    private const string WritablePragmas =
+        "PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL; "
+        + "PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000;";
+
+    /// <summary>
+    /// A writable connection: the sync engine's, and the accent picker's.
+    ///
+    /// WAL lets readers run alongside a writer but still permits only one
+    /// writer at a time, so a write issued while a sync holds the write lock
+    /// would fail immediately with SQLITE_BUSY. <c>busy_timeout</c> turns that
+    /// into a wait — a single-row update against <c>settings</c> finishes in
+    /// microseconds, and waiting out a sync's transaction is invisible.
+    /// </summary>
     public static SqliteConnection Open(string path)
     {
         var connection = new SqliteConnection($"Data Source={path}");
         connection.Open();
-        connection.Execute("PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;");
+
+        // synchronous = NORMAL skips an fsync on every commit under WAL
+        // (only the WAL checkpoint fsyncs). This database is a rebuildable
+        // local cache of Steam's own data — anything lost in an OS crash or
+        // power loss is simply re-fetched by the next sync — so trading the
+        // stronger FULL guarantee for faster commits is the right call here.
+        connection.Execute(WritablePragmas);
         Migrate(connection);
         return connection;
     }
@@ -39,25 +62,19 @@ public static class Database
     }
 
     /// <summary>
-    /// A third connection, for the settings and journal writers.
+    /// A third connection, for the settings and journal writers. Identical to
+    /// <see cref="Open"/> except that it skips <see cref="Migrate"/>.
     ///
-    /// Carries <c>busy_timeout</c> because WAL permits exactly one writer: a
-    /// click on the accent picker while a sync holds the write lock would
-    /// otherwise fail outright with SQLITE_BUSY instead of waiting the
-    /// microseconds a single-row update takes.
-    ///
-    /// Skips <see cref="Migrate"/> for the same reason <see cref="OpenRead"/>
-    /// does — schema ownership belongs to the writer, which has already run it
-    /// against this file. Running it again would replay nine
-    /// <c>CREATE TABLE IF NOT EXISTS</c> statements and two
+    /// Schema ownership belongs to the writer, which has already migrated this
+    /// file by the time the host opens this one. Running it again would replay
+    /// nine <c>CREATE TABLE IF NOT EXISTS</c> statements and two
     /// <c>pragma_table_info</c> scans before the window is shown, to no effect.
     /// </summary>
     public static SqliteConnection OpenSettings(string path)
     {
         var connection = new SqliteConnection($"Data Source={path}");
         connection.Open();
-        connection.Execute(
-            "PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000;");
+        connection.Execute(WritablePragmas);
         return connection;
     }
 

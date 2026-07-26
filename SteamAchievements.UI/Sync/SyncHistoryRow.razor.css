@@ -1,0 +1,14 @@
+.row {
+    display: grid;
+    grid-template-columns: 150px 1fr auto;
+    gap: 14px;
+    align-items: center;
+    padding: 10px 2px;
+    border-bottom: 1px solid var(--border-hairline);
+    font-size: 13px;
+}
+
+.when { font-size: 12px; color: var(--text-muted); }
+.what { color: var(--text-secondary); }
+.what.failed { color: var(--danger-text); }
+.dur { font-size: 12px; color: var(--text-dim); }

@@ -1,0 +1,10 @@
+<div class="track" style="max-width: @(MaxWidth ?? "none"); height: @(Height)px">
+    <div class="fill" style="width: @Percent%; background: @Color"></div>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public int Percent { get; set; }
+    [Parameter] public string Color { get; set; } = "var(--accent)";
+    [Parameter] public int Height { get; set; } = 3;
+    [Parameter] public string? MaxWidth { get; set; }
+}

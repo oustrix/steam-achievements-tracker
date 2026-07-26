@@ -6,8 +6,8 @@ using SteamAchievements.Core.Sync;
 namespace SteamAchievements.Core.App;
 
 /// <summary>
-/// Owns everything about a sync that is not the sync itself: which phase the UI
-/// is in, the cancellation token, the journal row, and the key-rejection flag.
+/// Owns everything about a sync that is not the sync itself: what the screen
+/// shows, the cancellation token, the journal row, and the key-rejection flag.
 ///
 /// Deliberately depends on <see cref="ISyncRunner"/> rather than on
 /// <c>SyncOrchestrator</c>, so every branch below is reachable from a unit test.
@@ -37,9 +37,9 @@ public sealed class SyncCoordinator : ISyncPresenter, ISyncController, IDisposab
 
     private CancellationTokenSource? _cancellation;
 
-    // Written under _gate, read once from the run's cancellation handler.
-    // Volatile rather than lock-guarded because a single bool needs nothing
-    // more than visibility.
+    // Written under _gate, read from the run's cancellation handler. Volatile
+    // rather than lock-guarded because a single bool needs nothing more than
+    // visibility.
     private volatile bool _pausing;
 
     private SyncStatusView _status;
@@ -53,10 +53,12 @@ public sealed class SyncCoordinator : ISyncPresenter, ISyncController, IDisposab
         _journal = journal;
         _now = now;
 
-        _status =
-            _accounts.KeyRejectedAt is not null ? SyncStatusView.KeyRejected()
-            : _journal.LastSyncedAt is null ? SyncStatusView.NeverRun()
-            : SyncStatusView.Idle();
+        // A key rejected during an earlier session is still rejected now. The
+        // flag is persisted precisely so a restart does not hide it and spend
+        // requests rediscovering it.
+        _status = _accounts.KeyRejectedAt is not null
+            ? SyncStatusView.Idle with { Problem = SyncProblem.InvalidKey }
+            : SyncStatusView.Idle;
     }
 
     public SyncStatusView Status
@@ -97,7 +99,11 @@ public sealed class SyncCoordinator : ISyncPresenter, ISyncController, IDisposab
 
         if (account is null)
         {
-            Publish(SyncStatusView.Failed(0, 0, "No Steam account is configured."));
+            Publish(SyncStatusView.Idle with
+            {
+                AlertTitle = "No Steam account is configured",
+                AlertBody = "Finish onboarding before syncing.",
+            });
             return;
         }
 
@@ -110,7 +116,7 @@ public sealed class SyncCoordinator : ISyncPresenter, ISyncController, IDisposab
 
             _pausing = false;
             _cancellation = new CancellationTokenSource();
-            _status = SyncStatusView.Starting();
+            _status = SyncStatusView.Idle with { Phase = SyncPhase.Running };
             _completion = RunAsync(account.SteamId64, force, _cancellation.Token);
         }
 
@@ -147,7 +153,13 @@ public sealed class SyncCoordinator : ISyncPresenter, ISyncController, IDisposab
             completed = report.Completed;
             total = report.Total;
 
-            Publish(SyncStatusView.Running(report.Completed, report.Total, report.CurrentGame));
+            var elapsed = _now() - startedAt;
+
+            Publish(new SyncStatusView(
+                SyncPhase.Running, report.Completed, report.Total, report.CurrentGame,
+                SyncProgressReport.Eta(report.Completed, report.Total, elapsed),
+                SyncProgressReport.Rate(report.Completed, elapsed),
+                null, null));
         });
 
         try
@@ -159,15 +171,22 @@ public sealed class SyncCoordinator : ISyncPresenter, ISyncController, IDisposab
             Record(startedAt, finishedAt, kind, completed, error: null);
             _journal.MarkSyncCompleted(finishedAt);
 
-            Publish(SyncStatusView.Idle(completed, total));
+            Publish(SyncStatusView.Idle);
         }
         catch (OperationCanceledException)
         {
-            Record(startedAt, _now(), kind, completed, SyncJournal.Cancelled);
+            Record(startedAt, _now(), kind, completed, SyncRunView.CancelledMarker);
 
+            // Paused keeps the figures on screen so it is clear where to resume
+            // from; cancelled returns to a clean idle.
             Publish(_pausing
-                ? SyncStatusView.Paused(completed, total)
-                : SyncStatusView.Cancelled(completed, total));
+                ? SyncStatusView.Idle with
+                {
+                    Phase = SyncPhase.Paused,
+                    Completed = completed,
+                    Total = total,
+                }
+                : SyncStatusView.Idle);
         }
         catch (SteamApiException e) when (e.Kind == SteamApiErrorKind.InvalidKey)
         {
@@ -175,13 +194,27 @@ public sealed class SyncCoordinator : ISyncPresenter, ISyncController, IDisposab
             _accounts.MarkKeyRejected(finishedAt);
             Record(startedAt, finishedAt, kind, completed, e.Message);
 
-            Publish(SyncStatusView.KeyRejected(completed, total, e.Message));
+            // A rejected key is a blocking condition rather than a failed run:
+            // retrying changes nothing until the key is replaced, and the screen
+            // renders that as its own Notice with a link to settings.
+            Publish(SyncStatusView.Idle with
+            {
+                Completed = completed,
+                Total = total,
+                Problem = SyncProblem.InvalidKey,
+            });
         }
         catch (Exception e)
         {
             Record(startedAt, _now(), kind, completed, e.Message);
 
-            Publish(SyncStatusView.Failed(completed, total, e.Message));
+            Publish(SyncStatusView.Idle with
+            {
+                Completed = completed,
+                Total = total,
+                AlertTitle = "Sync failed",
+                AlertBody = e.Message,
+            });
         }
         finally
         {

@@ -1,0 +1,14 @@
+.page {
+    display: flex;
+    flex-direction: column;
+    gap: 22px;
+    padding: 30px;
+    max-width: 760px;
+}
+
+.intro { display: flex; flex-direction: column; gap: 6px; }
+.intro h1 { margin: 0; font-size: 22px; font-weight: 600; letter-spacing: -0.02em; }
+.intro p { margin: 0; font-size: 13px; color: var(--text-muted); text-wrap: pretty; }
+
+.history { display: flex; flex-direction: column; gap: 9px; }
+.empty { margin: 0; font-size: 13px; color: var(--text-dim); }

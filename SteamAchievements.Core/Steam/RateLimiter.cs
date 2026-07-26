@@ -1,4 +1,4 @@
-namespace SteamAchievements.Core.Sync;
+namespace SteamAchievements.Core.Steam;
 
 /// <summary>
 /// Simple token bucket. Steam tolerates roughly five requests per second

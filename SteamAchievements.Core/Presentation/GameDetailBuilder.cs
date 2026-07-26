@@ -14,30 +14,26 @@ public static class GameDetailBuilder
     {
         var effort = EffortCalculator.Evaluate(achievements);
 
-        // The same normalisation EffortCalculator uses, so the rarity bars and
-        // the cost figures tell one story instead of two.
-        var known = achievements.Where(a => a.GlobalPercent is > 0).ToList();
-        var maxPercent = known.Count == 0 ? 0 : known.Max(a => a.GlobalPercent!.Value);
+        // effort.MaxPercent is the baseline EffortCalculator normalised against,
+        // so the rarity bars and the cost figures tell one story instead of two.
+        var maxPercent = effort.MaxPercent;
 
         var locked = achievements.Where(a => !a.Unlocked).ToList();
 
         var remaining = locked
-            .OrderBy(a => Cost(a, maxPercent))
-            .Select(a => Row(a, maxPercent))
+            .Select(a => (Achievement: a, Cost: EffortCalculator.CostOf(a, maxPercent)))
+            .OrderBy(entry => entry.Cost)
+            .Select(entry => Row(entry.Achievement, maxPercent, entry.Cost))
             .ToList();
 
         var unlocked = achievements.Where(a => a.Unlocked)
             .OrderByDescending(a => a.UnlockedAt ?? DateTimeOffset.MinValue)
-            .Select(a => Row(a, maxPercent))
+            .Select(a => Row(a, maxPercent, EffortCalculator.CostOf(a, maxPercent)))
             .ToList();
 
-        var rarestPercent = locked
-            .Where(a => a.GlobalPercent is not null)
-            .Select(a => a.GlobalPercent!.Value)
-            .DefaultIfEmpty(double.NaN)
-            .Min();
-
-        var complete = effort.TotalCount > 0 && effort.RemainingCount == 0;
+        // Min over double? ignores the unknowns and yields null when every
+        // locked achievement lacks a percent — no sentinel value needed.
+        var rarestPercent = locked.Select(a => a.GlobalPercent).Min();
 
         return new GameDetailView(
             game.AppId,
@@ -48,19 +44,16 @@ public static class GameDetailBuilder
             effort.TotalCount,
             (int)Math.Round(effort.CompletionPercent),
             effort.RemainingEffort.ToString("0.#", CultureInfo.InvariantCulture),
-            complete ? "complete" : QueueRowBuilder.EffortLabel(effort.RemainingEffort),
+            effort.Complete ? "complete" : QueueRowBuilder.EffortLabel(effort.RemainingEffort),
             effort.RemainingCount,
-            double.IsNaN(rarestPercent) ? "unknown" : Formatting.Percent(rarestPercent),
+            rarestPercent is { } rarest ? Formatting.Percent(rarest) : "unknown",
+            effort.RarityUnknown,
             remaining,
             unlocked);
     }
 
-    private static double Cost(AchievementProgress achievement, double maxPercent) =>
-        achievement.GlobalPercent is { } percent
-            ? EffortCalculator.Cost(percent, maxPercent)
-            : EffortCalculator.UnknownRarityCost;
-
-    private static AchievementRow Row(AchievementProgress achievement, double maxPercent)
+    private static AchievementRow Row(
+        AchievementProgress achievement, double maxPercent, double cost)
     {
         var percent = achievement.GlobalPercent;
 
@@ -83,7 +76,7 @@ public static class GameDetailBuilder
             percent,
             percent is { } p ? $"{Formatting.Percent(p)} of owners" : "rarity unknown",
             bar,
-            Cost(achievement, maxPercent).ToString("0.0", CultureInfo.InvariantCulture),
+            cost.ToString("0.0", CultureInfo.InvariantCulture),
             achievement.UnlockedAt is { } at ? Formatting.Date(at) : null);
     }
 }

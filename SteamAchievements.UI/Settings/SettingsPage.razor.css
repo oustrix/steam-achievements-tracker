@@ -1,0 +1,62 @@
+.page {
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+    padding: 30px;
+    max-width: 720px;
+}
+
+.page h1 { margin: 0; font-size: 22px; font-weight: 600; letter-spacing: -0.02em; }
+
+.account {
+    display: flex;
+    gap: 16px;
+    align-items: center;
+    padding: 18px;
+    border: 1px solid var(--border-subtle);
+    border-radius: 11px;
+    background: var(--bg-card);
+}
+
+.avatar {
+    width: 56px;
+    height: 56px;
+    border-radius: 8px;
+    background: var(--placeholder);
+    flex: none;
+}
+
+.who { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.who .name { font-size: 15px; font-weight: 600; }
+.who .id { font-size: 12px; color: var(--text-dim); }
+.spacer { flex: 1; }
+
+.block { display: flex; flex-direction: column; gap: 10px; }
+.label { font-size: 14px; font-weight: 600; }
+.hint { font-size: 12px; color: var(--text-dim); }
+
+.key-row { display: flex; gap: 9px; align-items: center; flex-wrap: wrap; }
+
+.key {
+    flex: 1;
+    min-width: 240px;
+    font-size: 13px;
+    padding: 11px 13px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--bg-raised);
+    color: var(--text-secondary);
+}
+
+.secondary {
+    font: inherit;
+    font-size: 13px;
+    padding: 11px 14px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--bg-selected);
+    color: var(--text);
+    cursor: pointer;
+}
+
+.secondary:disabled { opacity: 0.45; cursor: default; }

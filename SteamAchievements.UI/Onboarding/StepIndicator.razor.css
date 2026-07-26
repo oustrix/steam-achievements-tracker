@@ -1,0 +1,2 @@
+.steps { display: flex; gap: 7px; align-items: center; letter-spacing: 0.1em; }
+.done { color: var(--accent); }

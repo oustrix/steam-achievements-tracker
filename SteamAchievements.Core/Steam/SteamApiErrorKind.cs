@@ -10,6 +10,5 @@ public enum SteamApiErrorKind
 
     RateLimited,
     ServerError,
-    BadRequest,
     Unknown,
 }
