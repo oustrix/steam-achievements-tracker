@@ -1503,6 +1503,7 @@ Create `SteamAchievements.Core.Tests/Data/SqliteLibraryQueryTests.cs`:
 using Dapper;
 using Microsoft.Data.Sqlite;
 using SteamAchievements.Core.Data;
+using SteamAchievements.Core.Presentation;
 using SteamAchievements.Core.Steam;
 
 namespace SteamAchievements.Core.Tests.Data;
@@ -1668,9 +1669,10 @@ public class SqliteLibraryQueryTests
 
         Assert.Equal("Incremental — 4 games changed", history[0].WhatText);
         Assert.Equal("2.1 s", history[0].DurationText);
-        // Note the thin space: Formatting.Number separates thousands with
-        // U+2009, so an ASCII space here would fail the comparison.
-        Assert.Equal("Full sync — 1 482 games", history[1].WhatText);
+        // Composed rather than written out: Formatting.Number separates
+        // thousands with a thin space (U+2009), and a literal ASCII space here
+        // would fail the comparison for a reason invisible in the diff.
+        Assert.Equal($"Full sync — {Formatting.Number(1482)} games", history[1].WhatText);
         Assert.Equal("8 min 51 s", history[1].DurationText);
     }
 
