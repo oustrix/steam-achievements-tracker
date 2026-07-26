@@ -9,7 +9,13 @@ public static class Database
     {
         var connection = new SqliteConnection($"Data Source={path}");
         connection.Open();
-        connection.Execute("PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;");
+
+        // synchronous = NORMAL skips an fsync on every commit under WAL
+        // (only the WAL checkpoint fsyncs). This database is a rebuildable
+        // local cache of Steam's own data — anything lost in an OS crash or
+        // power loss is simply re-fetched by the next sync — so trading the
+        // stronger FULL guarantee for faster commits is the right call here.
+        connection.Execute("PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL; PRAGMA foreign_keys = ON;");
         Migrate(connection);
         return connection;
     }

@@ -35,32 +35,36 @@ public sealed class GameRepository
         {
             using var transaction = _connection.BeginTransaction();
 
-            foreach (var game in games)
-            {
-                _connection.Execute("""
-                    INSERT INTO games (app_id, name, icon_hash) VALUES (@AppId, @Name, @IconHash)
-                    ON CONFLICT(app_id) DO UPDATE SET name = excluded.name, icon_hash = excluded.icon_hash;
+            // Passing the whole collection as the parameter lets Dapper prepare
+            // this command once and reuse it across every row, instead of
+            // preparing a new command per game. Verified against
+            // Microsoft.Data.Sqlite that this batching works correctly even
+            // though the command text below is a compound statement (three
+            // INSERTs) rather than a single one — each execution runs all
+            // three per row, including the ON CONFLICT DO UPDATE branches.
+            _connection.Execute("""
+                INSERT INTO games (app_id, name, icon_hash) VALUES (@AppId, @Name, @IconHash)
+                ON CONFLICT(app_id) DO UPDATE SET name = excluded.name, icon_hash = excluded.icon_hash;
 
-                    INSERT INTO owned_games (app_id, playtime_forever, playtime_2weeks, last_played_at)
-                    VALUES (@AppId, @PlaytimeForever, @PlaytimeTwoWeeks, @LastPlayed)
-                    ON CONFLICT(app_id) DO UPDATE SET
-                        playtime_forever = excluded.playtime_forever,
-                        playtime_2weeks  = excluded.playtime_2weeks,
-                        last_played_at   = excluded.last_played_at;
+                INSERT INTO owned_games (app_id, playtime_forever, playtime_2weeks, last_played_at)
+                VALUES (@AppId, @PlaytimeForever, @PlaytimeTwoWeeks, @LastPlayed)
+                ON CONFLICT(app_id) DO UPDATE SET
+                    playtime_forever = excluded.playtime_forever,
+                    playtime_2weeks  = excluded.playtime_2weeks,
+                    last_played_at   = excluded.last_played_at;
 
-                    INSERT INTO sync_state (app_id) VALUES (@AppId)
-                    ON CONFLICT(app_id) DO NOTHING;
-                    """,
-                    new
-                    {
-                        game.AppId,
-                        game.Name,
-                        game.IconHash,
-                        game.PlaytimeForever,
-                        game.PlaytimeTwoWeeks,
-                        LastPlayed = game.LastPlayed?.ToString("o"),
-                    }, transaction);
-            }
+                INSERT INTO sync_state (app_id) VALUES (@AppId)
+                ON CONFLICT(app_id) DO NOTHING;
+                """,
+                games.Select(game => new
+                {
+                    game.AppId,
+                    game.Name,
+                    game.IconHash,
+                    game.PlaytimeForever,
+                    game.PlaytimeTwoWeeks,
+                    LastPlayed = game.LastPlayed?.ToString("o"),
+                }), transaction);
 
             transaction.Commit();
         }
@@ -122,41 +126,43 @@ public sealed class GameRepository
                 "INSERT INTO sync_state (app_id) VALUES (@AppId) ON CONFLICT(app_id) DO NOTHING",
                 new { AppId = appId }, transaction);
 
-            foreach (var achievement in schema)
-            {
-                // first_seen_at is written once and never overwritten: it is the
-                // only signal we will have for future DLC grouping.
-                _connection.Execute("""
-                    INSERT INTO achievements
-                        (app_id, api_name, display_name, description, icon_url, icon_gray_url,
-                         is_hidden, sort_order, first_seen_at)
-                    VALUES (@AppId, @ApiName, @DisplayName, @Description, @IconUrl, @IconGrayUrl,
-                            @IsHidden, @SortOrder, @Now)
-                    ON CONFLICT(app_id, api_name) DO UPDATE SET
-                        display_name  = excluded.display_name,
-                        description   = excluded.description,
-                        icon_url      = excluded.icon_url,
-                        icon_gray_url = excluded.icon_gray_url,
-                        is_hidden     = excluded.is_hidden,
-                        sort_order    = excluded.sort_order;
-                    """,
-                    new
-                    {
-                        AppId = appId,
-                        achievement.ApiName,
-                        achievement.DisplayName,
-                        achievement.Description,
-                        achievement.IconUrl,
-                        achievement.IconGrayUrl,
-                        IsHidden = achievement.IsHidden ? 1 : 0,
-                        achievement.SortOrder,
-                        Now = now.ToString("o"),
-                    }, transaction);
-            }
+            var nowIso = now.ToString("o");
+
+            // first_seen_at is written once and never overwritten: it is the
+            // only signal we will have for future DLC grouping. Passing the
+            // whole schema as the parameter lets Dapper prepare this command
+            // once and reuse it across every achievement, instead of
+            // preparing a new command per row.
+            _connection.Execute("""
+                INSERT INTO achievements
+                    (app_id, api_name, display_name, description, icon_url, icon_gray_url,
+                     is_hidden, sort_order, first_seen_at)
+                VALUES (@AppId, @ApiName, @DisplayName, @Description, @IconUrl, @IconGrayUrl,
+                        @IsHidden, @SortOrder, @Now)
+                ON CONFLICT(app_id, api_name) DO UPDATE SET
+                    display_name  = excluded.display_name,
+                    description   = excluded.description,
+                    icon_url      = excluded.icon_url,
+                    icon_gray_url = excluded.icon_gray_url,
+                    is_hidden     = excluded.is_hidden,
+                    sort_order    = excluded.sort_order;
+                """,
+                schema.Select(achievement => new
+                {
+                    AppId = appId,
+                    achievement.ApiName,
+                    achievement.DisplayName,
+                    achievement.Description,
+                    achievement.IconUrl,
+                    achievement.IconGrayUrl,
+                    IsHidden = achievement.IsHidden ? 1 : 0,
+                    achievement.SortOrder,
+                    Now = nowIso,
+                }), transaction);
 
             _connection.Execute(
                 "UPDATE sync_state SET schema_synced_at = @Now WHERE app_id = @AppId",
-                new { AppId = appId, Now = now.ToString("o") }, transaction);
+                new { AppId = appId, Now = nowIso }, transaction);
 
             transaction.Commit();
         }
@@ -201,15 +207,17 @@ public sealed class GameRepository
                 "INSERT INTO sync_state (app_id) VALUES (@AppId) ON CONFLICT(app_id) DO NOTHING",
                 new { AppId = appId }, transaction);
 
-            foreach (var (apiName, percent) in percentages)
-            {
-                _connection.Execute("""
-                    INSERT INTO global_percents (app_id, api_name, percent, fetched_at)
-                    VALUES (@AppId, @ApiName, @Percent, @Now)
-                    ON CONFLICT(app_id, api_name) DO UPDATE SET
-                        percent = excluded.percent, fetched_at = excluded.fetched_at;
-                    """, new { AppId = appId, ApiName = apiName, Percent = percent, Now = now }, transaction);
-            }
+            // Passing the whole dictionary as the parameter lets Dapper
+            // prepare this command once and reuse it across every
+            // achievement, instead of preparing a new command per row.
+            _connection.Execute("""
+                INSERT INTO global_percents (app_id, api_name, percent, fetched_at)
+                VALUES (@AppId, @ApiName, @Percent, @Now)
+                ON CONFLICT(app_id, api_name) DO UPDATE SET
+                    percent = excluded.percent, fetched_at = excluded.fetched_at;
+                """,
+                percentages.Select(kv => new { AppId = appId, ApiName = kv.Key, Percent = kv.Value, Now = now }),
+                transaction);
 
             _connection.Execute("UPDATE sync_state SET global_synced_at = @Now WHERE app_id = @AppId",
                 new { AppId = appId, Now = now }, transaction);
@@ -223,22 +231,22 @@ public sealed class GameRepository
         {
             using var transaction = _connection.BeginTransaction();
 
-            foreach (var item in progress)
-            {
-                _connection.Execute("""
-                    INSERT INTO player_achievements (app_id, api_name, unlocked, unlocked_at)
-                    VALUES (@AppId, @ApiName, @Unlocked, @UnlockedAt)
-                    ON CONFLICT(app_id, api_name) DO UPDATE SET
-                        unlocked = excluded.unlocked, unlocked_at = excluded.unlocked_at;
-                    """,
-                    new
-                    {
-                        AppId = appId,
-                        item.ApiName,
-                        Unlocked = item.Unlocked ? 1 : 0,
-                        UnlockedAt = item.UnlockedAt?.ToString("o"),
-                    }, transaction);
-            }
+            // Passing the whole collection as the parameter lets Dapper
+            // prepare this command once and reuse it across every
+            // achievement, instead of preparing a new command per row.
+            _connection.Execute("""
+                INSERT INTO player_achievements (app_id, api_name, unlocked, unlocked_at)
+                VALUES (@AppId, @ApiName, @Unlocked, @UnlockedAt)
+                ON CONFLICT(app_id, api_name) DO UPDATE SET
+                    unlocked = excluded.unlocked, unlocked_at = excluded.unlocked_at;
+                """,
+                progress.Select(item => new
+                {
+                    AppId = appId,
+                    item.ApiName,
+                    Unlocked = item.Unlocked ? 1 : 0,
+                    UnlockedAt = item.UnlockedAt?.ToString("o"),
+                }), transaction);
 
             transaction.Commit();
         }

@@ -11,14 +11,16 @@ public sealed class SteamApiClient
     };
 
     private readonly HttpClient _http;
-    private readonly string _apiKey;
     private readonly RateLimiter _rateLimiter;
 
     // The key is free text pasted by the user (see the constructor comment),
     // so it must be percent-encoded before landing in a query string. An
     // unescaped '&' injects extra parameters; an unescaped '#' truncates the
     // request at a URI fragment, silently dropping everything after it.
-    private string EscapedKey => Uri.EscapeDataString(_apiKey);
+    // Escaped once here rather than on every property access — every request
+    // reads this field (~2700 times over a full sync), and the key never
+    // changes for the lifetime of the client.
+    private readonly string _escapedKey;
 
     /// <param name="rateLimiter">
     /// Defaults to the production ~5 requests/second budget Steam tolerates.
@@ -32,14 +34,14 @@ public sealed class SteamApiClient
         _http = http;
         // Onboarding fills this field from the clipboard, which is exactly
         // where a stray newline or trailing space shows up.
-        _apiKey = apiKey.Trim();
+        _escapedKey = Uri.EscapeDataString(apiKey.Trim());
         _rateLimiter = rateLimiter ?? new RateLimiter(requestsPerSecond: 5);
     }
 
     public async Task<IReadOnlyList<OwnedGame>> GetOwnedGamesAsync(ulong steamId, CancellationToken cancellationToken)
     {
         var envelope = await GetJsonAsync<OwnedGamesEnvelope>(
-            $"IPlayerService/GetOwnedGames/v1/?key={EscapedKey}&steamid={steamId}" +
+            $"IPlayerService/GetOwnedGames/v1/?key={_escapedKey}&steamid={steamId}" +
             "&include_appinfo=1&include_played_free_games=1", cancellationToken);
 
         // A private profile answers 200 with an empty response object.
@@ -58,7 +60,7 @@ public sealed class SteamApiClient
     public async Task<IReadOnlyList<AchievementSchema>> GetSchemaForGameAsync(uint appId, CancellationToken cancellationToken)
     {
         var envelope = await GetJsonAsync<SchemaEnvelope>(
-            $"ISteamUserStats/GetSchemaForGame/v2/?key={EscapedKey}&appid={appId}&l=english", cancellationToken);
+            $"ISteamUserStats/GetSchemaForGame/v2/?key={_escapedKey}&appid={appId}&l=english", cancellationToken);
 
         var achievements = envelope.Game?.Stats?.Achievements ?? [];
 
@@ -80,7 +82,7 @@ public sealed class SteamApiClient
         ulong steamId, uint appId, CancellationToken cancellationToken)
     {
         var envelope = await GetJsonAsync<PlayerStatsEnvelope>(
-            $"ISteamUserStats/GetPlayerAchievements/v1/?key={EscapedKey}&steamid={steamId}&appid={appId}&l=english",
+            $"ISteamUserStats/GetPlayerAchievements/v1/?key={_escapedKey}&steamid={steamId}&appid={appId}&l=english",
             cancellationToken);
 
         return envelope.PlayerStats?.Achievements?
