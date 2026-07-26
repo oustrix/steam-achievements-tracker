@@ -1,3 +1,5 @@
+using System.Diagnostics.CodeAnalysis;
+using System.Runtime.ExceptionServices;
 using Polly;
 using Polly.CircuitBreaker;
 using Polly.Retry;
@@ -95,16 +97,29 @@ public sealed class SyncOrchestrator
         var names = owned.ToDictionary(g => g.AppId, g => g.Name);
         var completed = 0;
 
-        await Parallel.ForEachAsync(
-            plan,
-            new ParallelOptions { MaxDegreeOfParallelism = WorkerCount, CancellationToken = cancellationToken },
-            async (item, token) =>
-            {
-                await SyncGameAsync(steamId, item, token);
+        try
+        {
+            await Parallel.ForEachAsync(
+                plan,
+                new ParallelOptions { MaxDegreeOfParallelism = WorkerCount, CancellationToken = cancellationToken },
+                async (item, token) =>
+                {
+                    await SyncGameAsync(steamId, item, token);
 
-                var done = Interlocked.Increment(ref completed);
-                progress?.Report(new SyncProgress(done, plan.Count, names.GetValueOrDefault(item.AppId, string.Empty)));
-            });
+                    var done = Interlocked.Increment(ref completed);
+                    progress?.Report(new SyncProgress(done, plan.Count, names.GetValueOrDefault(item.AppId, string.Empty)));
+                });
+        }
+        catch (AggregateException aggregate)
+        {
+            // With WorkerCount workers sharing one key, an invalid key gets
+            // rejected by several workers before cancellation stops the
+            // rest, so Parallel.ForEachAsync wraps them in an
+            // AggregateException instead of surfacing the bare
+            // SteamApiException a caller can catch on Kind == InvalidKey.
+            ThrowUnwrapped(aggregate, cancellationToken);
+            throw; // unreachable: ThrowUnwrapped always throws.
+        }
 
         // Trend charts come later, but the history behind them cannot be
         // reconstructed after the fact — record it from the very first sync.
@@ -188,5 +203,47 @@ public sealed class SyncOrchestrator
                 _repository.MarkError(item.AppId, e.Message);
             }
         }
+    }
+
+    /// <summary>
+    /// Reduces an <see cref="AggregateException"/> from <see cref="Parallel.ForEachAsync{TSource}(IEnumerable{TSource}, ParallelOptions, Func{TSource, CancellationToken, ValueTask})"/>
+    /// back down to a single exception, so a caller can write
+    /// <c>catch (SteamApiException e) when (e.Kind == SteamApiErrorKind.InvalidKey)</c>
+    /// around <see cref="RunAsync"/> without worrying how many workers were
+    /// in flight when the failure happened.
+    /// </summary>
+    [DoesNotReturn]
+    private static void ThrowUnwrapped(AggregateException aggregate, CancellationToken cancellationToken)
+    {
+        var inner = aggregate.Flatten().InnerExceptions;
+
+        // Genuine caller cancellation must still surface as
+        // OperationCanceledException, even if it raced with other workers'
+        // failures and got bundled into the same aggregate.
+        if (cancellationToken.IsCancellationRequested)
+        {
+            var cancellation = inner.OfType<OperationCanceledException>().FirstOrDefault();
+            if (cancellation is not null)
+            {
+                ExceptionDispatchInfo.Capture(cancellation).Throw();
+            }
+        }
+
+        if (inner.Count > 0 && inner.All(e => e is SteamApiException))
+        {
+            var steamErrors = inner.Cast<SteamApiException>().ToList();
+
+            // Several workers can independently discover the same invalid
+            // key; any one of them carries the same actionable information,
+            // so surface that rather than an arbitrary other kind.
+            var mostSignificant = steamErrors.FirstOrDefault(e => e.Kind == SteamApiErrorKind.InvalidKey)
+                ?? steamErrors[0];
+            ExceptionDispatchInfo.Capture(mostSignificant).Throw();
+        }
+
+        // Genuinely different concurrent failures (e.g. not all the same
+        // exception kind) — don't discard information by arbitrarily
+        // picking one; surface the aggregate as-is.
+        ExceptionDispatchInfo.Capture(aggregate).Throw();
     }
 }

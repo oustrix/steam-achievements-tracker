@@ -256,4 +256,57 @@ public class SyncOrchestratorTests
 
         Assert.Equal(SteamApiErrorKind.InvalidKey, exception.Kind);
     }
+
+    [Fact]
+    public async Task PropagatesInvalidKeyDiscoveredMidSyncAcrossMultipleWorkers()
+    {
+        // 8 never-synced games against WorkerCount=4 workers: every worker
+        // is in flight when the key gets rejected, so several of them
+        // discover SteamApiException(InvalidKey) concurrently.
+        // Parallel.ForEachAsync would otherwise wrap those into an
+        // AggregateException, which defeats a caller's
+        // `catch (SteamApiException e) when (e.Kind == InvalidKey)` — the
+        // one actionable message in the whole onboarding flow.
+        var games = string.Join(",", Enumerable.Range(1, 8).Select(i => $$"""
+            { "appid": {{400 + i}}, "name": "Game {{i}}", "playtime_forever": 100,
+              "img_icon_url": "abc", "rtime_last_played": 1750000000 }
+            """));
+
+        var multiGameOwned = $$"""
+            {
+              "response": {
+                "game_count": 8,
+                "games": [{{games}}]
+              }
+            }
+            """;
+
+        var handler = new FakeHttpMessageHandler(request =>
+        {
+            var url = request.RequestUri!.ToString();
+            if (url.Contains("GetOwnedGames")) return Json(multiGameOwned);
+
+            // Every per-game call rejects the key — since none of these
+            // games have synced before, schema is the first call each
+            // worker makes, so several workers hit this at once.
+            return new HttpResponseMessage(HttpStatusCode.Unauthorized)
+            {
+                Content = new StringContent("<html><body>Access is denied.</body></html>",
+                    System.Text.Encoding.UTF8, "text/html"),
+            };
+        });
+
+        var sync = new SyncOrchestrator(
+            new SteamApiClient(new HttpClient(handler) { BaseAddress = new Uri("https://api.steampowered.com/") }, "TESTKEY"),
+            new GameRepository(Database.Open(":memory:")),
+            SyncOptions.Default);
+
+        // Pins that even with multiple concurrent workers discovering the
+        // same failure, RunAsync surfaces a bare SteamApiException — not an
+        // AggregateException — so a caller can catch it directly.
+        var exception = await Assert.ThrowsAsync<SteamApiException>(
+            () => sync.RunAsync(SteamId, force: false, progress: null, CancellationToken.None));
+
+        Assert.Equal(SteamApiErrorKind.InvalidKey, exception.Kind);
+    }
 }
