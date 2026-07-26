@@ -7,9 +7,17 @@ public sealed class FixtureSyncPresenter(FixtureLibraryQuery library) : ISyncPre
 {
     public SyncStatusView Status => library.Scenario switch
     {
-        Scenario.Empty or Scenario.InvalidKey or Scenario.PrivateProfile => SyncStatusView.Idle,
+        // A library nobody has synced yet. Nothing is wrong with it, which is
+        // exactly what makes it a different state from the three below.
+        Scenario.Empty => SyncStatusView.Idle,
 
-        Scenario.OtherAccount => new SyncStatusView(
+        Scenario.InvalidKey => SyncStatusView.Idle with { Problem = SyncProblem.InvalidKey },
+
+        Scenario.PrivateProfile => SyncStatusView.Idle with { Problem = SyncProblem.PrivateProfile },
+
+        Scenario.OtherAccount => SyncStatusView.Idle with { Problem = SyncProblem.OtherAccount },
+
+        Scenario.CircuitOpen => new SyncStatusView(
             SyncPhase.CircuitOpen, 412, 1482, "Divinity: Original Sin 2 — schema",
             "~6 min left", "4.8 req/s",
             "Paused after five consecutive failures",

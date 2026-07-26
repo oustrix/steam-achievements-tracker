@@ -522,6 +522,26 @@ and code signing.
   read the clock — `ILibraryQuery` takes `now` as a parameter, by design — so
   something above it has to supply one, and the sync screen needed a seam to
   render against before `SyncOrchestrator` is actually wired to it.
+- `SyncStatusView` gained a `SyncProblem` enum — none, rejected key, private
+  profile, a different account signed in — and `SyncPage` switches on it.
+  Section 7 lists the notices but not what decides between them, and the first
+  implementation inferred them from `LibrarySummary.GameCount == 0`. That is
+  also true on the very first run, so a new installation accused the user of a
+  revoked key, and the `empty`, `invalid-key` and `private-profile` scenarios
+  rendered identically. Which of the conditions holds is known only to whatever
+  ran the sync, so it is stated on the seam rather than guessed from unrelated
+  data.
+- The "A different Steam account is signed in" notice takes its title and shape
+  from the mockup but not its body verbatim: the mockup names the cached
+  persona ("Cached data belongs to **oustrix**"), and the persona name comes
+  from a profile endpoint section 14 leaves unimplemented. The body says
+  "a different account" until that exists.
+- The preview gained a sixth scenario, `circuit-open`, which section 11 does
+  not list. The circuit-breaker notice used to be what `other-account`
+  rendered — a scenario showing a different row of section 7's table than its
+  name promises. Once `other-account` renders its own notice, nothing else
+  reaches the circuit breaker, and one of the five required notices would have
+  become unviewable.
 - `Formatting` gained minute and hour buckets that section 5.4 did not
   mention, because the sidebar's "Last sync 14 min ago" needs a bucket finer
   than the day-level relative dates the achievement rows use.

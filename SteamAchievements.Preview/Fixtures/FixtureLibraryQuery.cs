@@ -16,6 +16,12 @@ public enum Scenario
     PrivateProfile,
     RarityUnknown,
     OtherAccount,
+
+    // Not in spec section 11's list. The circuit-breaker Notice is one of the
+    // five that section 7 requires, and once other-account renders its own
+    // notice — which is what its name promises — no scenario reaches the
+    // circuit breaker at all.
+    CircuitOpen,
 }
 
 public sealed class FixtureLibraryQuery : ILibraryQuery

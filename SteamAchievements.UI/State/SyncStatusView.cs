@@ -8,6 +8,22 @@ public enum SyncPhase
     CircuitOpen,
 }
 
+/// <summary>
+/// A condition that stops the library from being synced, as opposed to
+/// something that went wrong during a run. Each value names one of the Notice
+/// blocks spec section 7 places on the sync screen. It is stated explicitly
+/// because it cannot be inferred: an empty library means a rejected key, a
+/// private profile, a different account signed in, or simply that nobody has
+/// synced yet — which is the state every new installation starts in.
+/// </summary>
+public enum SyncProblem
+{
+    None,
+    InvalidKey,
+    PrivateProfile,
+    OtherAccount,
+}
+
 public sealed record SyncStatusView(
     SyncPhase Phase,
     int Completed,
@@ -16,7 +32,8 @@ public sealed record SyncStatusView(
     string EtaText,
     string RateText,
     string? AlertTitle,
-    string? AlertBody)
+    string? AlertBody,
+    SyncProblem Problem = SyncProblem.None)
 {
     public static SyncStatusView Idle { get; } =
         new(SyncPhase.Idle, 0, 0, "", "", "", null, null);

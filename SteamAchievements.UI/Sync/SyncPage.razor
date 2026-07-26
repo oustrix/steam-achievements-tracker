@@ -23,24 +23,37 @@
         </Notice>
     }
 
-    @if (_summary.GameCount == 0)
+    @switch (_status.Problem)
     {
-        <Notice Severity="NoticeSeverity.Danger"
-                Title="Steam rejected the API key"
-                ActionLabel="Open settings"
-                OnAction="OpenSettings">
-            <Body>
-                HTTP 401. The key was revoked or mistyped — retrying will not help.
-                Replace it in Settings.
-            </Body>
-        </Notice>
+        case SyncProblem.InvalidKey:
+            <Notice Severity="NoticeSeverity.Danger"
+                    Title="Steam rejected the API key"
+                    ActionLabel="Open settings"
+                    OnAction="OpenSettings">
+                <Body>
+                    HTTP 401. The key was revoked or mistyped — retrying will not help.
+                    Replace it in Settings.
+                </Body>
+            </Notice>
+            break;
 
-        <Notice Severity="NoticeSeverity.Warning" Title="Your game details are private">
-            <Body>
-                Steam returns an empty library even to you until
-                <strong>Game details</strong> is set to Public in your privacy settings.
-            </Body>
-        </Notice>
+        case SyncProblem.PrivateProfile:
+            <Notice Severity="NoticeSeverity.Warning" Title="Your game details are private">
+                <Body>
+                    Steam returns an empty library even to you until
+                    <strong>Game details</strong> is set to Public in your privacy settings.
+                </Body>
+            </Notice>
+            break;
+
+        case SyncProblem.OtherAccount:
+            <Notice Title="A different Steam account is signed in">
+                <Body>
+                    Cached data belongs to a different account. Blending two libraries
+                    would make the ranking meaningless — choose one.
+                </Body>
+            </Notice>
+            break;
     }
 
     <div class="history">
@@ -61,13 +74,11 @@
 
 @code {
     private SyncStatusView _status = SyncStatusView.Idle;
-    private LibrarySummary _summary = new(0, 0, "", "");
     private IReadOnlyList<SyncRunView> _history = [];
 
     protected override void OnInitialized()
     {
         _status = Sync.Status;
-        _summary = Library.GetSummary(Clock.Now);
         _history = Library.GetSyncHistory(20, Clock.Now);
     }
 
