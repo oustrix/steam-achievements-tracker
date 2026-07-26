@@ -2596,7 +2596,15 @@ The product's core value, and pure enough to be exhaustively tested.
 
 **Interfaces:**
 - Consumes: `AchievementProgress` (Task 6)
-- Produces: `record GameEffort(double RemainingEffort, int RemainingCount, int UnlockedCount, int TotalCount, bool HasBlockers, bool RarityUnknown, double CompletionPercent)`; `EffortCalculator.Cost(double percent, double maxPercent) → double`; `EffortCalculator.Evaluate(IReadOnlyList<AchievementProgress>) → GameEffort`
+- Produces: `record GameEffort(double RemainingEffort, int RemainingCount, int UnlockedCount, int TotalCount, bool RarityUnknown, double CompletionPercent)`; `EffortCalculator.Cost(double percent, double maxPercent) → double`; `EffortCalculator.Evaluate(IReadOnlyList<AchievementProgress>) → GameEffort`
+
+> **Superseded during execution.** This task's original text carried a blocker
+> concept (flagging achievements below a rarity threshold). It was removed by a
+> product decision — a low global percentage conflates difficulty, when the
+> achievement was added, and whether it occurs organically, so the flag sold a
+> noisy heuristic as fact. See design doc section 8.1. The blocker tests and
+> logic below are retained only as a record of what was originally planned; the
+> shipped code has no blocker concept.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -2879,3 +2887,29 @@ the registry, `ISecretStore` over DPAPI, the clipboard watcher, the onboarding
 wizard, the completion queue screen and the game screen. It is written
 separately because those pieces can only be verified through CI on Windows,
 whereas everything in this plan runs locally in seconds.
+
+---
+
+## Divergences between this plan and the shipped code
+
+This plan was written without the ability to run any of it. Reviews and
+implementers found real defects in eight of the nine tasks. Where the plan's
+code text still shows the original version, the shipped code is authoritative —
+`git log` is the record. The substantive divergences, and why they exist:
+
+| Task | Plan said | Shipped code does | Why |
+|---|---|---|---|
+| 2 | `Children` returned the backing dictionary typed as an interface | Returns a `ReadOnlyDictionary` | The shared `Empty` node could be cast back and mutated, poisoning every later parse in the process |
+| 2 | Unterminated quotes and trailing garbage accepted silently | Both throw `FormatException` | Malformed input must fail loudly, and root level must behave like nested level |
+| 3 | `FromUnixTimeSeconds` called directly | Corrupted timestamps clamp to `MinValue` | A garbage timestamp threw and discarded every account in the file; dropping the entry instead made `SelectActive` silently return the WRONG account |
+| 3 | `FirstOrDefault(MostRecent)` | Explicit tie-break by newest timestamp among flagged accounts | The flag comes from a file we do not control |
+| 4 | No handling of transport failures | `HttpRequestException` and timeouts classified as transient `SteamApiException`; genuine cancellation still propagates | Unclassified failures defeat the retry policy, and the URL carries `key=` |
+| 4 | `has no stats` matched on any status | Matched only on HTTP 400 | A 429 whose body contained the phrase silently lost its backoff |
+| 5 | Key interpolated raw into URLs | `Uri.EscapeDataString`, key trimmed | Onboarding fills this field from the clipboard; a key with `#` silently dropped every later query parameter |
+| 5 | `ToDictionary` on achievement names | Grouped, first occurrence wins | Duplicate names threw a raw `ArgumentException` that would abort a whole game |
+| 6 | Row records used `uint`/`int` | Use `long` with narrowing casts | SQLite returns `Int64` for INTEGER and Dapper's constructor materializer needs exact CLR types |
+| 6 | `UpsertSchema` assumed the game row existed | Inserts placeholder `games` and `sync_state` rows first | Foreign-key violation, and a silent no-op `UPDATE` left `schema_synced_at` unset — which would have killed the 30-day TTL and re-fetched every schema on every sync |
+| 8 | Repository called directly from 4 concurrent workers | Repository calls serialized behind a lock | One `SqliteConnection` cannot serve overlapping transactions; invisible on a 2-game fixture, constant on 1500 games |
+| 8 | Retry delay hardcoded | Injectable, production default unchanged at 1s/2s/4s/8s | Tests would otherwise sleep for real seconds |
+| 9 | Blocker flagging by rarity threshold | No blocker concept at all | Product decision — see design doc 8.1 |
+| 9 | `GlobalPercent ?? 0` | Null treated as unknown with neutral cost | Conflating unknown with verified-zero inflated effort for games whose rarity data Steam has not backfilled |
