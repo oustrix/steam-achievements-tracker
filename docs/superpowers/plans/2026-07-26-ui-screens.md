@@ -2089,10 +2089,15 @@ Create `SteamAchievements.UI/wwwroot/app.css`:
     --border: #2b2833;
     --border-strong: #3a3444;
     --border-hover: #544c60;
+    --border-selected: #4a4256;
 
     --text: #edeae3;
     --text-secondary: #c6bfb4;
     --text-muted: #9c968c;
+    /* Sits between muted and dim: text that is de-emphasised because it is
+       already resolved — a completed row's reason, a hidden achievement's
+       name, the clipboard hint. Recurs three times in the mockup. */
+    --text-faded: #8d8579;
     --text-dim: #6f6a63;
     --text-faint: #57515e;
 
@@ -3560,7 +3565,7 @@ Create `SteamAchievements.UI/Queue/QueueRowCard.razor.css`:
     transition: background 120ms, border-color 120ms;
 }
 
-.row.selected { background: var(--bg-selected); border-color: #4a4256; }
+.row.selected { background: var(--bg-selected); border-color: var(--border-selected); }
 .row.done { opacity: 0.6; }
 
 .cover-slot { height: 96px; }
@@ -3580,7 +3585,7 @@ Create `SteamAchievements.UI/Queue/QueueRowCard.razor.css`:
 
 .counts { font-size: 11px; color: var(--text-dim); flex: none; }
 .reason { font-size: 13px; color: var(--text-secondary); }
-.row.done .reason { color: #8d8579; }
+.row.done .reason { color: var(--text-faded); }
 
 .effort {
     display: flex;
@@ -4089,7 +4094,7 @@ Create `SteamAchievements.UI/Game/RemainingRow.razor.css`:
 .icon-slot { height: 48px; }
 .text { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
 .name { font-size: 14px; font-weight: 600; }
-.name.hidden { color: #8d8579; }
+.name.hidden { color: var(--text-faded); }
 
 .desc {
     font-size: 12px;
@@ -5168,7 +5173,7 @@ Create `SteamAchievements.UI/Onboarding/OnboardingPage.razor.css`:
     border-radius: 8px;
     border: 1px dashed var(--warn-border);
     background: var(--warn-bg);
-    color: #8d8579;
+    color: var(--text-faded);
 }
 
 .pulse { width: 7px; height: 7px; border-radius: 7px; background: var(--accent); flex: none; }

@@ -323,8 +323,8 @@ apart.
 | Group | Values |
 |---|---|
 | Surfaces | page `#0e0d10`, shell `#141317`, sidebar `#121115`, card `#18171c`, raised `#1b1a20`, selected `#1f1d26` / `#211f28` |
-| Borders | hairline `#201e26`, subtle `#232028`, default `#2b2833`, strong `#3a3444`, hover `#544c60` |
-| Text | primary `#edeae3`, secondary `#c6bfb4`, muted `#9c968c`, dim `#6f6a63`, faint `#57515e` |
+| Borders | hairline `#201e26`, subtle `#232028`, default `#2b2833`, strong `#3a3444`, hover `#544c60`, selected `#4a4256` |
+| Text | primary `#edeae3`, secondary `#c6bfb4`, muted `#9c968c`, faded `#8d8579`, dim `#6f6a63`, faint `#57515e` |
 | Accent | `#e0a355`, hover `#f0bd7c`, dim `#7a6a52`, on-accent `#1a1509` |
 | Warning | surface `#211a12`, border `#4a3b26`, text `#f0bd7c`, button `#2c2317` |
 | Danger | surface `#1f1517`, border `#4a2626`, text `#e89898`, button `#2a191b` / `#6b3232` |
