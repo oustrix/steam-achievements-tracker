@@ -1026,6 +1026,7 @@ public sealed record GameDetailView(
     string EffortLabel,
     int    Remaining,
     string RarestText,
+    bool   RarityUnknown,
     IReadOnlyList<AchievementRow> RemainingAchievements,
     IReadOnlyList<AchievementRow> UnlockedAchievements);
 ```
@@ -1088,6 +1089,7 @@ public static class GameDetailBuilder
             complete ? "complete" : QueueRowBuilder.EffortLabel(effort.RemainingEffort),
             effort.RemainingCount,
             double.IsNaN(rarestPercent) ? "unknown" : Formatting.Percent(rarestPercent),
+            effort.RarityUnknown,
             remaining,
             unlocked);
     }
@@ -4204,7 +4206,7 @@ else
             </div>
         </div>
 
-        @if (_game.RarestText == "unknown" && _game.Remaining > 0)
+        @if (_game.RarityUnknown && _game.Remaining > 0)
         {
             <Notice Title="Rarity data unavailable">
                 <Body>
@@ -4300,11 +4302,11 @@ Run: `dotnet run --project SteamAchievements.Preview`, open `http://localhost:51
 Expected:
 - The real `header.jpg` banner with a "← Queue" button over it.
 - "Hollow Knight", "84 h played · last played 3 days ago", the progress bar, and "60 of 63 unlocked · 95%".
-- Two stat cards: `4.2` / "remaining effort" / "an evening", and `3` / "left" / "rarest 2.1%".
+- Two stat cards: `10.9` / "remaining effort" / "a few sessions", and `3` / "left" / "rarest 2.1%".
 - Remaining ordered cheapest first, ending with the hidden one, which reads "Hidden achievement" in a dimmed colour with the explanatory description.
 - Achievement icons all fall back to the hatch placeholder — the fixture URLs do not resolve on purpose, which is exactly the case worth seeing.
 - "← Queue" returns to the queue with Hollow Knight still selected and the sort unchanged.
-- Opening `http://localhost:5100/game/435150` (Divinity) shows the "Rarity data unavailable" notice.
+- Opening `http://localhost:5100/game/435150` (Divinity) does NOT show the "Rarity data unavailable" notice, and that is correct: Divinity has rarity for 33 of its 39 locked achievements. The notice means "Steam has no percentages for this game at all", which EffortCalculator reports as RarityUnknown only when every achievement lacks data. No fixture game is in that state yet — Task 13 gives the `rarity-unknown` scenario one, which is where this notice becomes visible.
 - Opening `http://localhost:5100/game/1` shows "That game is not in your library".
 
 - [ ] **Step 6: Commit**
