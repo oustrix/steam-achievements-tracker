@@ -1,0 +1,38 @@
+<div class="row @(Selected ? "selected" : "") @(Row.Complete ? "done" : "")"
+     role="button" tabindex="-1"
+     @onclick="OnOpen" @onmouseenter="OnSelect">
+
+    <div class="cover-slot">
+        <CoverImage Url="@CoverUrl" FallbackLabel="@Row.Name" />
+    </div>
+
+    <div class="middle">
+        <div class="heading">
+            <span class="name">@Row.Name</span>
+            <span class="counts num">@Row.Unlocked of @Row.Total</span>
+        </div>
+        <ProgressBar Percent="Row.CompletionPercent" MaxWidth="420px"
+                     Color="@(Row.Complete ? "var(--bar-complete)" : "var(--accent)")" />
+        <div class="reason">@Row.Reason</div>
+    </div>
+
+    <div class="effort">
+        <div class="value num" style="color: @(Row.Complete ? "var(--text-dim)" : "var(--accent)")">
+            @Row.EffortText
+        </div>
+        <div class="micro">effort</div>
+        <ProgressBar Percent="BarPercent" Color="var(--accent-dim)" />
+        <div class="label">@Row.EffortLabel</div>
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public QueueRow Row { get; set; } = default!;
+    [Parameter, EditorRequired] public int BarPercent { get; set; }
+    [Parameter] public bool Selected { get; set; }
+    [Parameter] public EventCallback OnOpen { get; set; }
+    [Parameter] public EventCallback OnSelect { get; set; }
+
+    private string CoverUrl =>
+        $"https://cdn.cloudflare.steamstatic.com/steam/apps/{Row.AppId}/library_600x900.jpg";
+}

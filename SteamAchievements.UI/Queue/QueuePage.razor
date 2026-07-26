@@ -1,12 +1,68 @@
 @page "/"
+@implements IDisposable
 @inject ILibraryQuery Library
 @inject IClock Clock
+@inject QueueState State
+@inject NavigationManager Navigation
 
-<h1>Completion queue</h1>
-<p class="num">@_queue.Rows.Count of @_queue.TotalGames games</p>
+<PageTitle>Completion queue</PageTitle>
+
+<QueueToolbar State="State" Shown="_rows.Count" Total="_queue.TotalGames" />
+
+<div class="list">
+    @if (_rows.Count == 0)
+    {
+        <EmptyState Title="@EmptyTitle" Body="@EmptyBody" />
+    }
+    else
+    {
+        @foreach (var row in _rows)
+        {
+            <QueueRowCard Row="row"
+                          BarPercent="QueueRowBuilder.EffortBarPercent(row.Effort, _maxEffort)"
+                          Selected="State.SelectedAppId == row.AppId"
+                          OnOpen="() => Open(row.AppId)"
+                          OnSelect="() => State.Select(row.AppId)" />
+        }
+    }
+</div>
 
 @code {
     private QueueView _queue = new([], 0);
+    private IReadOnlyList<QueueRow> _rows = [];
+    private double _maxEffort;
 
-    protected override void OnInitialized() => _queue = Library.GetQueue(Clock.Now);
+    protected override void OnInitialized()
+    {
+        _queue = Library.GetQueue(Clock.Now);
+        State.Changed += Refresh;
+        Refresh();
+    }
+
+    public void Dispose() => State.Changed -= Refresh;
+
+    private void Refresh()
+    {
+        _rows = QueueFilter.Apply(_queue.Rows, State.Criteria);
+
+        // The bar scale is relative to what is on screen, so it is recomputed
+        // whenever the filter changes rather than baked into the row.
+        _maxEffort = _rows.Count == 0 ? 0 : _rows.Max(r => r.Effort);
+
+        StateHasChanged();
+    }
+
+    private void Open(uint appId)
+    {
+        State.Select(appId);
+        Navigation.NavigateTo($"game/{appId}");
+    }
+
+    private string EmptyTitle => _queue.Rows.Count == 0
+        ? "Nothing left to rank"
+        : "No games match those filters";
+
+    private string EmptyBody => _queue.Rows.Count == 0
+        ? "Every game with achievements in your library is at 100 %. Play something new, then sync."
+        : "Widen the search or lower the minimum playtime.";
 }

@@ -14,8 +14,7 @@ builder.Services.AddScoped<FixtureLibraryQuery>();
 builder.Services.AddScoped<ILibraryQuery>(s => s.GetRequiredService<FixtureLibraryQuery>());
 builder.Services.AddScoped<IUserPreferences, InMemoryUserPreferences>();
 
-// QueueState is registered in Task 10, which is where the type is created.
-// Registering it here would leave this project not compiling until then.
+builder.Services.AddScoped<QueueState>();
 
 // Frozen so the preview reads identically on every run.
 builder.Services.AddScoped<IClock>(_ => new FixedClock(FixtureData.Now));

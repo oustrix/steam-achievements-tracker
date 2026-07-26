@@ -1,0 +1,7 @@
+.track {
+    border-radius: 3px;
+    background: var(--track);
+    overflow: hidden;
+}
+
+.fill { height: 100%; }

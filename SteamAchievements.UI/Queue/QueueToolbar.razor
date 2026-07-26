@@ -1,0 +1,62 @@
+<div class="toolbar">
+    <div class="headline">
+        <div class="title-block">
+            <h1>Completion queue</h1>
+            <p>Sorted by how much work is left, not by how far the bar looks.
+               Rarity is a number — the call is yours.</p>
+        </div>
+
+        <div class="sorts micro">
+            <span>sort</span>
+            @foreach (var (sort, label) in Sorts)
+            {
+                <button class="sort @(State.Criteria.Sort == sort ? "on" : "")"
+                        @onclick="() => State.SortBy(sort)">
+                    @label <span class="arrow">@Arrow(sort)</span>
+                </button>
+            }
+        </div>
+    </div>
+
+    <div class="filters">
+        <div class="search">
+            <span class="glass"></span>
+            <input value="@State.Criteria.Query" placeholder="Search titles"
+                   @oninput="e => State.SetQuery(e.Value?.ToString() ?? string.Empty)" />
+        </div>
+
+        <select class="playtime" value="@State.Criteria.MinPlaytimeHours"
+                @onchange='e => State.SetMinPlaytime(int.Parse(e.Value?.ToString() ?? "0"))'>
+            <option value="0">Min. playtime: any</option>
+            <option value="1">Min. playtime: 1 h</option>
+            <option value="5">Min. playtime: 5 h</option>
+            <option value="20">Min. playtime: 20 h</option>
+        </select>
+
+        <button class="toggle @(State.Criteria.HideComplete ? "on" : "")" @onclick="State.ToggleComplete">
+            @(State.Criteria.HideComplete ? "100 % complete: hidden" : "100 % complete: shown")
+        </button>
+
+        <span class="spacer"></span>
+
+        <span class="count num">
+            @Formatting.Number(Shown) of @Formatting.Number(Total) games · ↑↓ to move, Enter to open
+        </span>
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public QueueState State { get; set; } = default!;
+    [Parameter, EditorRequired] public int Shown { get; set; }
+    [Parameter, EditorRequired] public int Total { get; set; }
+
+    private static readonly (QueueSort Sort, string Label)[] Sorts =
+    [
+        (QueueSort.Effort, "Effort"),
+        (QueueSort.Completion, "Completion"),
+        (QueueSort.Playtime, "Playtime"),
+    ];
+
+    private string Arrow(QueueSort sort) =>
+        State.Criteria.Sort != sort ? "" : State.Criteria.Descending ? "↓" : "↑";
+}

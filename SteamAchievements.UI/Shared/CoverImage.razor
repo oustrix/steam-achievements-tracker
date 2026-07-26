@@ -1,0 +1,20 @@
+@if (_failed || string.IsNullOrEmpty(Url))
+{
+    <div class="cover placeholder">
+        <span class="label num">@FallbackLabel</span>
+    </div>
+}
+else
+{
+    <img class="cover" src="@Url" alt="@FallbackLabel" loading="lazy" @onerror="() => _failed = true" />
+}
+
+@code {
+    [Parameter, EditorRequired] public string? Url { get; set; }
+    [Parameter] public string FallbackLabel { get; set; } = "";
+
+    private bool _failed;
+
+    /// <summary>A new app id means a new image, so the previous failure no longer applies.</summary>
+    protected override void OnParametersSet() => _failed = false;
+}
