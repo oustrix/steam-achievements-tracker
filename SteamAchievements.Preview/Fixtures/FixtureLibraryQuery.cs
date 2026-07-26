@@ -22,6 +22,11 @@ public enum Scenario
     // notice — which is what its name promises — no scenario reaches the
     // circuit breaker at all.
     CircuitOpen,
+
+    // A machine that has never been onboarded: no account, no key. Reaching
+    // this state through the fixtures is the only way to see AppShell's
+    // onboarding guard on macOS.
+    FirstRun,
 }
 
 public sealed class FixtureLibraryQuery : ILibraryQuery
@@ -37,9 +42,16 @@ public sealed class FixtureLibraryQuery : ILibraryQuery
 
     public Scenario Scenario { get; set; } = Scenario.Normal;
 
-    private IReadOnlyList<FixtureGame> Source => Scenario switch
+    /// <summary>
+    /// Set by FixtureAccountAdmin when the user switches accounts or resets.
+    /// Both empty the library for real, so the confirmations are verified by
+    /// their effect rather than by their appearance.
+    /// </summary>
+    public bool Cleared { get; set; }
+
+    private IReadOnlyList<FixtureGame> Source => Cleared ? [] : Scenario switch
     {
-        Scenario.Empty or Scenario.PrivateProfile or Scenario.InvalidKey => [],
+        Scenario.Empty or Scenario.PrivateProfile or Scenario.InvalidKey or Scenario.FirstRun => [],
 
         // Divinity with its rarity stripped entirely. Taking the game as-is
         // would NOT reach this state: EffortCalculator reports RarityUnknown

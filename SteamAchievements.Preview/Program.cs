@@ -14,8 +14,17 @@ builder.Services.AddScoped<FixtureLibraryQuery>();
 builder.Services.AddScoped<ILibraryQuery>(s => s.GetRequiredService<FixtureLibraryQuery>());
 builder.Services.AddScoped<IUserPreferences, InMemoryUserPreferences>();
 
+builder.Services.AddScoped<FixtureSync>();
+builder.Services.AddScoped<ISyncPresenter>(s => s.GetRequiredService<FixtureSync>());
+builder.Services.AddScoped<ISyncController>(s => s.GetRequiredService<FixtureSync>());
+
+builder.Services.AddScoped<IOnboarding, FixtureOnboarding>();
+builder.Services.AddScoped<IAccountAdmin, FixtureAccountAdmin>();
+builder.Services.AddScoped<IExternalLinks, FixtureLinks>();
+
+builder.Services.AddScoped<LibraryChangeSignal>();
+
 builder.Services.AddScoped<QueueState>();
-builder.Services.AddScoped<ISyncPresenter, FixtureSyncPresenter>();
 
 // Frozen so the preview reads identically on every run.
 builder.Services.AddScoped<IClock>(_ => new FixedClock(FixtureData.Now));
