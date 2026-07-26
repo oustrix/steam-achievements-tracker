@@ -13,7 +13,6 @@ public static class QueueRowBuilder
     public static QueueRow Build(OwnedGame game, IReadOnlyList<AchievementProgress> achievements)
     {
         var effort = EffortCalculator.Evaluate(achievements);
-        var complete = effort.TotalCount > 0 && effort.RemainingCount == 0;
 
         return new QueueRow(
             game.AppId,
@@ -23,10 +22,10 @@ public static class QueueRowBuilder
             (int)Math.Round(effort.CompletionPercent),
             effort.RemainingEffort,
             effort.RemainingEffort.ToString("0.#", CultureInfo.InvariantCulture),
-            complete ? "complete" : EffortLabel(effort.RemainingEffort),
+            effort.Complete ? "complete" : EffortLabel(effort.RemainingEffort),
             ReasonWriter.Write(achievements),
             game.PlaytimeForever / 60,
-            complete,
+            effort.Complete,
             effort.RarityUnknown);
     }
 

@@ -8,7 +8,16 @@ public sealed record GameEffort(
     int UnlockedCount,
     int TotalCount,
     bool RarityUnknown,
-    double CompletionPercent);
+    double CompletionPercent,
+    double MaxPercent)
+{
+    /// <summary>
+    /// Nothing left to unlock. A game with no achievements at all is not
+    /// complete — there was never anything to finish — which is why this is
+    /// not simply <c>RemainingCount == 0</c>.
+    /// </summary>
+    public bool Complete => TotalCount > 0 && RemainingCount == 0;
+}
 
 /// <summary>
 /// Ranks games by how much work is left rather than by completion percentage.
@@ -43,6 +52,21 @@ public static class EffortCalculator
     /// </summary>
     public const double UnknownRarityCost = 1;
 
+    /// <summary>
+    /// What one locked achievement contributes to <see cref="GameEffort.RemainingEffort"/>,
+    /// including the neutral weight an unknown percent receives.
+    ///
+    /// The game screen orders achievements by this number and prints it beside
+    /// each one, so it has to be the same arithmetic the total above the list
+    /// was summed from. Exposing the operation rather than only its constants
+    /// keeps the two in agreement by construction, instead of by a test that
+    /// notices once they have already drifted.
+    /// </summary>
+    public static double CostOf(AchievementProgress achievement, double maxPercent) =>
+        achievement.GlobalPercent is { } percent
+            ? Cost(percent, maxPercent)
+            : UnknownRarityCost;
+
     public static double Cost(double percent, double maxPercent)
     {
         if (maxPercent <= 0)
@@ -58,7 +82,7 @@ public static class EffortCalculator
     {
         if (achievements.Count == 0)
         {
-            return new GameEffort(0, 0, 0, 0, false, 0);
+            return new GameEffort(0, 0, 0, 0, false, 0, 0);
         }
 
         var unlocked = achievements.Count(a => a.Unlocked);
@@ -71,7 +95,7 @@ public static class EffortCalculator
         {
             // No rarity data at all — every remaining achievement counts as one unit.
             return new GameEffort(locked.Count, locked.Count, unlocked, achievements.Count,
-                RarityUnknown: true, completion);
+                RarityUnknown: true, completion, MaxPercent: 0);
         }
 
         // RarityUnknown reports "we have no basis to rank this game at all," so it
@@ -84,23 +108,13 @@ public static class EffortCalculator
         // making the signal nearly useless.
 
         var maxPercent = known.Max(a => a.GlobalPercent!.Value);
-        var effort = 0.0;
 
-        foreach (var achievement in locked)
-        {
-            if (achievement.GlobalPercent is not { } percent)
-            {
-                // Unknown rarity for this achievement specifically. Give it the
-                // same neutral weight as the whole-game fallback rather than
-                // treating "we don't know" as a claim about rarity.
-                effort += UnknownRarityCost;
-                continue;
-            }
-
-            effort += Cost(percent, maxPercent);
-        }
+        // CostOf gives an achievement with no percent the same neutral weight as
+        // the whole-game fallback above, rather than treating "we don't know" as
+        // a claim about rarity.
+        var effort = locked.Sum(a => CostOf(a, maxPercent));
 
         return new GameEffort(effort, locked.Count, unlocked, achievements.Count,
-            RarityUnknown: false, completion);
+            RarityUnknown: false, completion, maxPercent);
     }
 }

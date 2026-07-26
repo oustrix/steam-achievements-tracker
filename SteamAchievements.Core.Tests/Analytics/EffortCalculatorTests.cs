@@ -31,6 +31,55 @@ public class EffortCalculatorTests
     }
 
     [Fact]
+    public void AGameWithNothingLeftIsComplete()
+    {
+        var effort = EffortCalculator.Evaluate(
+        [
+            Achievement("A", unlocked: true, percent: 50),
+            Achievement("B", unlocked: true, percent: 25),
+        ]);
+
+        Assert.True(effort.Complete);
+    }
+
+    [Fact]
+    public void AGameWithNoAchievementsAtAllIsNotComplete()
+    {
+        // Zero remaining out of zero is not an accomplishment. Both screens read
+        // Complete straight off this record, so the distinction has to hold here
+        // rather than in each of them.
+        var effort = EffortCalculator.Evaluate([]);
+
+        Assert.Equal(0, effort.RemainingCount);
+        Assert.False(effort.Complete);
+    }
+
+    [Fact]
+    public void PublishesTheBaselineItNormalisedAgainst()
+    {
+        // The game screen prices individual achievements against this number, so
+        // it has to be the same one the total above the list was summed from.
+        var effort = EffortCalculator.Evaluate(
+        [
+            Achievement("A", unlocked: true, percent: 55),
+            Achievement("B", unlocked: false, percent: 27.5),
+        ]);
+
+        Assert.Equal(55, effort.MaxPercent, 6);
+        Assert.Equal(effort.RemainingEffort, EffortCalculator.CostOf(
+            Achievement("B", unlocked: false, percent: 27.5), effort.MaxPercent), 6);
+    }
+
+    [Fact]
+    public void PricesAnAchievementWithNoRarityAtTheNeutralWeight()
+    {
+        var unknown = EffortCalculator.CostOf(
+            Achievement("A", unlocked: false, percent: null), maxPercent: 55);
+
+        Assert.Equal(EffortCalculator.UnknownRarityCost, unknown, 6);
+    }
+
+    [Fact]
     public void CountsOnlyLockedAchievementsTowardsEffort()
     {
         var effort = EffortCalculator.Evaluate(
