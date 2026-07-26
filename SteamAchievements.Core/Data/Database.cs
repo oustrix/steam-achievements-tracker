@@ -28,8 +28,7 @@ public static class Database
             CREATE TABLE IF NOT EXISTS games (
                 app_id            INTEGER PRIMARY KEY,
                 name              TEXT NOT NULL,
-                icon_hash         TEXT NOT NULL DEFAULT '',
-                schema_synced_at  TEXT
+                icon_hash         TEXT NOT NULL DEFAULT ''
             );
 
             CREATE TABLE IF NOT EXISTS owned_games (
