@@ -18,7 +18,7 @@
 - **Never let `Microsoft.Win32` or `System.Security.Cryptography.ProtectedData` into Core.**
 - **Components must wrap every reaction to a service event in `InvokeAsync(StateHasChanged)`** before touching `ILibraryQuery`. `SqliteLibraryQuery` sits on one `SqliteConnection`; concurrent use corrupts rather than throws.
 - **Components that subscribe must unsubscribe in `Dispose`.** The services are singletons in the shipping host and outlive any component instance.
-- **Run `dotnet format` before each commit.**
+- **Run `dotnet format` before each commit, naming the projects you touched** — `dotnet format SteamAchievements.Core`, `dotnet format SteamAchievements.Core.Tests`, `dotnet format SteamAchievements.UI`, `dotnet format SteamAchievements.Preview`. A bare `dotnet format` at the repository root fails on macOS for the same NETSDK1100 reason a bare `dotnet test` does, and silently skipping it is how formatting drift lands.
 - Tests use xUnit with plain `Assert`. No FluentAssertions, no NSubstitute for these types — hand-written fakes, following `SteamAchievements.Core.Tests/Fakes.cs`.
 
 ## File Structure
