@@ -659,27 +659,56 @@ public static class LoginUsersReader
 
         foreach (var (rawId, node) in users.Children)
         {
+            // An unparseable SteamID64 makes the entry structurally unusable —
+            // that is the only case worth dropping.
             if (!ulong.TryParse(rawId, out var steamId))
             {
                 continue;
             }
 
-            _ = long.TryParse(node["Timestamp"].Value, out var timestamp);
+            // A corrupted timestamp must NOT drop the account. This file is
+            // written by Steam, not by us, and the MostRecent flag stays
+            // legible even when the timestamp does not. Dropping the entry
+            // would make SelectActive silently return a different account —
+            // worse than any error, because it looks like success.
+            DateTimeOffset timestamp;
+            if (long.TryParse(node["Timestamp"].Value, out var timestampSeconds))
+            {
+                try
+                {
+                    timestamp = DateTimeOffset.FromUnixTimeSeconds(timestampSeconds);
+                }
+                catch (ArgumentOutOfRangeException)
+                {
+                    timestamp = DateTimeOffset.MinValue;
+                }
+            }
+            else
+            {
+                timestamp = DateTimeOffset.MinValue;
+            }
 
             accounts.Add(new SteamAccount(
                 steamId,
                 node["AccountName"].Value ?? string.Empty,
                 node["PersonaName"].Value ?? string.Empty,
                 node["MostRecent"].Value == "1",
-                DateTimeOffset.FromUnixTimeSeconds(timestamp)));
+                timestamp));
         }
 
         return accounts;
     }
 
-    public static SteamAccount? SelectActive(IReadOnlyList<SteamAccount> accounts) =>
-        accounts.FirstOrDefault(a => a.MostRecent)
-        ?? accounts.MaxBy(a => a.Timestamp);
+    public static SteamAccount? SelectActive(IReadOnlyList<SteamAccount> accounts)
+    {
+        // Steam should flag exactly one account, but this comes from a file we
+        // cannot trust — break ties explicitly by newest timestamp.
+        var flagged = accounts.Where(a => a.MostRecent).ToList();
+
+        return flagged.Count > 0
+            ? flagged.MaxBy(a => a.Timestamp)
+            : accounts.MaxBy(a => a.Timestamp);
+    }
 }
 ```
 
