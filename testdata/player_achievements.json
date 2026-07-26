@@ -1,0 +1,11 @@
+{
+  "playerstats": {
+    "steamID": "76561190000000002",
+    "gameName": "The Witcher 3: Wild Hunt",
+    "achievements": [
+      { "apiname": "ACH_1", "achieved": 1, "unlocktime": 1700000000 },
+      { "apiname": "ACH_2", "achieved": 0, "unlocktime": 0 }
+    ],
+    "success": true
+  }
+}

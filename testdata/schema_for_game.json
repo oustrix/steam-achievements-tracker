@@ -1,0 +1,13 @@
+{
+  "game": {
+    "gameName": "The Witcher 3: Wild Hunt",
+    "availableGameStats": {
+      "achievements": [
+        { "name": "ACH_1", "displayName": "Lilac and Gooseberries", "description": "Find Yennefer.",
+          "hidden": 0, "icon": "https://cdn.example/ach1.jpg", "icongray": "https://cdn.example/ach1_gray.jpg" },
+        { "name": "ACH_2", "displayName": "Passed the Trial", "description": "",
+          "hidden": 1, "icon": "https://cdn.example/ach2.jpg", "icongray": "https://cdn.example/ach2_gray.jpg" }
+      ]
+    }
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "response": {
+    "game_count": 2,
+    "games": [
+      { "appid": 292030, "name": "The Witcher 3: Wild Hunt", "playtime_forever": 6420,
+        "playtime_2weeks": 120, "img_icon_url": "abc123", "rtime_last_played": 1750000000 },
+      { "appid": 220, "name": "Half-Life 2", "playtime_forever": 0,
+        "img_icon_url": "def456", "rtime_last_played": 0 }
+    ]
+  }
+}

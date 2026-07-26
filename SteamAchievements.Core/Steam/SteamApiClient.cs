@@ -19,31 +19,79 @@ public sealed class SteamApiClient
         _apiKey = apiKey;
     }
 
-    // The following four methods are provisional stubs. They exist only to let
-    // Task 4's error-classification tests exercise the shared send-and-classify
-    // path below. Task 5 replaces their bodies with real parsing into typed
-    // records (OwnedGame, AchievementSchema, PlayerAchievement, global
-    // percentages) — do not build on these signatures elsewhere yet.
+    public async Task<IReadOnlyList<OwnedGame>> GetOwnedGamesAsync(ulong steamId, CancellationToken cancellationToken)
+    {
+        var envelope = await GetJsonAsync<OwnedGamesEnvelope>(
+            $"IPlayerService/GetOwnedGames/v1/?key={_apiKey}&steamid={steamId}" +
+            "&include_appinfo=1&include_played_free_games=1", cancellationToken);
 
-    public Task<JsonDocument> GetOwnedGamesAsync(ulong steamId, CancellationToken cancellationToken) =>
-        GetJsonAsync<JsonDocument>(
-            $"IPlayerService/GetOwnedGames/v1/?key={_apiKey}&steamid={steamId}&include_appinfo=1&include_played_free_games=1",
+        // A private profile answers 200 with an empty response object.
+        return envelope.Response?.Games?
+            .Select(g => new OwnedGame(
+                g.AppId,
+                g.Name ?? string.Empty,
+                g.IconHash ?? string.Empty,
+                g.PlaytimeForever,
+                g.PlaytimeTwoWeeks,
+                g.LastPlayed > 0 ? DateTimeOffset.FromUnixTimeSeconds(g.LastPlayed) : null))
+            .ToList()
+            ?? [];
+    }
+
+    public async Task<IReadOnlyList<AchievementSchema>> GetSchemaForGameAsync(uint appId, CancellationToken cancellationToken)
+    {
+        var envelope = await GetJsonAsync<SchemaEnvelope>(
+            $"ISteamUserStats/GetSchemaForGame/v2/?key={_apiKey}&appid={appId}&l=english", cancellationToken);
+
+        var achievements = envelope.Game?.Stats?.Achievements ?? [];
+
+        // Schema order is stable and reflects the order achievements were added,
+        // which is the raw material for future DLC grouping. Preserve it.
+        return achievements
+            .Select((a, index) => new AchievementSchema(
+                a.Name ?? string.Empty,
+                a.DisplayName ?? string.Empty,
+                a.Description ?? string.Empty,
+                a.Icon ?? string.Empty,
+                a.IconGray ?? string.Empty,
+                a.Hidden == 1,
+                index))
+            .ToList();
+    }
+
+    public async Task<IReadOnlyList<PlayerAchievement>> GetPlayerAchievementsAsync(
+        ulong steamId, uint appId, CancellationToken cancellationToken)
+    {
+        var envelope = await GetJsonAsync<PlayerStatsEnvelope>(
+            $"ISteamUserStats/GetPlayerAchievements/v1/?key={_apiKey}&steamid={steamId}&appid={appId}&l=english",
             cancellationToken);
 
-    public Task<JsonDocument> GetSchemaForGameAsync(uint appId, CancellationToken cancellationToken) =>
-        GetJsonAsync<JsonDocument>(
-            $"ISteamUserStats/GetSchemaForGame/v2/?key={_apiKey}&appid={appId}",
-            cancellationToken);
+        return envelope.PlayerStats?.Achievements?
+            .Select(a => new PlayerAchievement(
+                a.ApiName ?? string.Empty,
+                a.Achieved == 1,
+                a.Achieved == 1 && a.UnlockTime > 0
+                    ? DateTimeOffset.FromUnixTimeSeconds(a.UnlockTime)
+                    : null))
+            .ToList()
+            ?? [];
+    }
 
-    public Task<JsonDocument> GetPlayerAchievementsAsync(ulong steamId, uint appId, CancellationToken cancellationToken) =>
-        GetJsonAsync<JsonDocument>(
-            $"ISteamUserStats/GetPlayerAchievements/v1/?key={_apiKey}&steamid={steamId}&appid={appId}",
-            cancellationToken);
+    /// <summary>
+    /// Global achievement rarity. This endpoint takes <c>gameid</c> rather than
+    /// <c>appid</c> and requires no API key — see docs/steam-api.md.
+    /// </summary>
+    public async Task<IReadOnlyDictionary<string, double>> GetGlobalPercentagesAsync(
+        uint appId, CancellationToken cancellationToken)
+    {
+        var envelope = await GetJsonAsync<GlobalPercentagesEnvelope>(
+            $"ISteamUserStats/GetGlobalAchievementPercentagesForApp/v2/?gameid={appId}", cancellationToken);
 
-    public Task<JsonDocument> GetGlobalPercentagesAsync(uint appId, CancellationToken cancellationToken) =>
-        GetJsonAsync<JsonDocument>(
-            $"ISteamUserStats/GetGlobalAchievementPercentagesForApp/v2/?gameid={appId}",
-            cancellationToken);
+        return envelope.Percentages?.Achievements?
+            .Where(a => a.Name is not null)
+            .ToDictionary(a => a.Name!, a => a.Percent)
+            ?? new Dictionary<string, double>();
+    }
 
     internal async Task<T> GetJsonAsync<T>(string path, CancellationToken cancellationToken)
     {
