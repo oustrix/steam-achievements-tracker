@@ -494,6 +494,16 @@ here too. In settings, Replace key, Change account and Reset database render
 but do not act. Onboarding is three finished screens with no logic behind
 them.
 
+**Reporting the sync problem.** `SyncStatusView.Problem` decides which of
+section 7's account-level notices the sync screen shows — a rejected key, a
+private profile, a different account signed in — and the only implementation
+that ships here, `IdleSyncPresenter`, always reports `None`. Whatever runs the
+sync is the only thing that knows which condition holds: it has the 401, the
+empty library from a private profile, and the SteamID64 the cache was built
+from. Setting `SyncProblem` on the `ISyncPresenter` seam is part of wiring
+`SyncOrchestrator` to the screens. Until then the three notices are reachable
+only through the preview host's scenarios.
+
 **Persona name and avatar.** The mockup shows both; they come from the public
 `?xml=1` profile endpoint, which `SteamApiClient` does not implement.
 
