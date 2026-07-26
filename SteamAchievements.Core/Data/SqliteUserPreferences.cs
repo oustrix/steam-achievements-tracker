@@ -23,11 +23,15 @@ public sealed class SqliteUserPreferences : IUserPreferences
     /// Read from the database once and served from memory afterwards. The
     /// shell renders the accent into a CSS variable on every render and the
     /// settings screen reads it again for the picker, so a single click would
-    /// otherwise be three synchronous round-trips on the UI thread. Nothing
-    /// outside this type writes <c>settings.accent</c>, so the cached value
-    /// cannot go stale behind its back; keeping the memoization here rather
-    /// than in a decorator means the invariant does not depend on whoever
-    /// registers this service later.
+    /// otherwise be three synchronous round-trips on the UI thread.
+    ///
+    /// The cache requires <b>one instance per database file</b>. Each instance
+    /// holds its own copy and refreshes it only from its own
+    /// <see cref="SetAccent"/>, so a second instance over the same file would
+    /// go on serving the old colour forever after the first one writes. That is
+    /// a constraint on how this is registered — a singleton, not a scoped
+    /// service — and it is why the memoization lives here rather than in a
+    /// decorator someone has to remember to add.
     /// </summary>
     public string? Accent
     {

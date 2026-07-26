@@ -100,6 +100,14 @@ public class DatabaseMigrationTests
         try
         {
             using (Database.Open(path)) { }
+
+            // Open and OpenRead build the same connection string, so disposing
+            // the writer returns its handle — busy timeout already set — to the
+            // pool that OpenRead draws from. Without this the assertion below
+            // passes whether or not OpenRead sets the pragma at all, which is
+            // coverage that certifies nothing.
+            SqliteConnection.ClearAllPools();
+
             using var reader = Database.OpenRead(path);
 
             Assert.Equal(5000, reader.QuerySingle<long>("PRAGMA busy_timeout"));
