@@ -5298,7 +5298,7 @@ Run: `dotnet run --project SteamAchievements.Preview` and confirm each of these 
 
 | URL | Confirm |
 |---|---|
-| `/` | 13 rows, Hollow Knight first, real covers, "1 left: one rare (2.1%)" |
+| `/` | 12 rows, Undertale first, real covers, reasons in the `ReasonWriter` format ("5 left, one below 5% of owners"). Corrected after measurement: 14 fixtures minus Celeste and Portal 2, which `QueueCriteria.Default` hides, is 12; Undertale's effort of 8.9 sorts ahead of Hollow Knight's 10.9. The earlier "13 rows, Hollow Knight first, '1 left: one rare (2.1%)'" was copied from the mockup and never held — no fixture has fewer than three achievements left, and that colon-and-percentage phrasing is not a shape `ReasonWriter` produces. |
 | `/` | Sort buttons flip direction; search narrows; playtime filter applies; complete-toggle shows Celeste and Portal 2 dimmed |
 | `/` | ↑↓ move the selection and scroll it into view; Enter opens the game |
 | `/game/367520` | Banner, two stat cards, remaining cheapest-first, hidden achievement explained |
