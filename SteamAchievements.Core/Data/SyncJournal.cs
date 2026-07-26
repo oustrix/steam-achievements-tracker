@@ -1,4 +1,3 @@
-using System.Globalization;
 using Dapper;
 using Microsoft.Data.Sqlite;
 
@@ -55,19 +54,10 @@ public sealed class SyncJournal
     /// means "last successful sync": the sidebar renders it as "Last sync 14 min
     /// ago" regardless of whether the run was full or incremental.
     /// </summary>
-    public void MarkSyncCompleted(DateTimeOffset at) => _connection.Execute("""
-        INSERT INTO settings (id, last_full_sync_at) VALUES (1, @At)
-        ON CONFLICT(id) DO UPDATE SET last_full_sync_at = excluded.last_full_sync_at;
-        """, new { At = at.ToString("o") });
+    public void MarkSyncCompleted(DateTimeOffset at) =>
+        Settings.WriteTimestamp(_connection, LastSyncColumn, at);
 
-    public DateTimeOffset? LastSyncedAt
-    {
-        get
-        {
-            var stored = _connection.QuerySingleOrDefault<string?>(
-                "SELECT last_full_sync_at FROM settings WHERE id = 1");
+    public DateTimeOffset? LastSyncedAt => Settings.ReadTimestamp(_connection, LastSyncColumn);
 
-            return stored is null ? null : DateTimeOffset.Parse(stored, CultureInfo.InvariantCulture);
-        }
-    }
+    private const string LastSyncColumn = "last_full_sync_at";
 }

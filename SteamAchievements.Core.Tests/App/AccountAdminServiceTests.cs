@@ -1,5 +1,4 @@
 using System.Net;
-using SteamAchievements.Core.Abstractions;
 using SteamAchievements.Core.App;
 using SteamAchievements.Core.Data;
 using SteamAchievements.Core.Steam;
@@ -14,31 +13,7 @@ public class AccountAdminServiceTests
     // the stored account to differ from the active one.
     private static readonly ulong Stored = 76561190000000009;
     private static readonly ulong Other = 76561190000000003;
-    private static readonly ulong ActiveInFixture = 76561190000000002;
-
-    private sealed class MemorySecretStore : ISecretStore
-    {
-        public string? Secret { get; private set; } = "0123456789ABCDEF0123456789ABCDEF";
-
-        public string? Read() => Secret;
-
-        public void Write(string secret) => Secret = secret;
-
-        public void Clear() => Secret = null;
-    }
-
-    private sealed class FixedPath(string? path) : ISteamPathProvider
-    {
-        public string? FindSteamPath() => path;
-    }
-
-    private static string SteamRootWithFixture()
-    {
-        var root = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());
-        Directory.CreateDirectory(Path.Combine(root, "config"));
-        File.Copy(TestPaths.Data("loginusers.vdf"), Path.Combine(root, "config", "loginusers.vdf"));
-        return root;
-    }
+    private static readonly ulong ActiveInFixture = TempSteamRoot.ActiveSteamId;
 
     private static async Task<(AccountAdminService Admin, MemorySecretStore Secrets, IAccountStore Accounts, Microsoft.Data.Sqlite.SqliteConnection Connection)>
         BuildAsync(string? steamPath = null)
@@ -51,7 +26,7 @@ public class AccountAdminServiceTests
         var repository = new GameRepository(connection);
         repository.UpsertOwnedGames([new OwnedGame(220, "Half-Life 2", "hash", 600, 0, null)]);
 
-        var secrets = new MemorySecretStore();
+        var secrets = new MemorySecretStore("0123456789ABCDEF0123456789ABCDEF");
         var community = new SteamCommunityClient(
             new HttpClient(FakeHttpMessageHandler.Returning(HttpStatusCode.OK, body, "text/xml"))
             {
@@ -59,7 +34,8 @@ public class AccountAdminServiceTests
             });
 
         var admin = new AccountAdminService(
-            connection, accounts, secrets, new SteamAccountLocator(new FixedPath(steamPath)), community);
+            new SqliteLibraryReset(connection), accounts, secrets,
+            new SteamAccountLocator(new FixedSteamPath(steamPath)), community);
 
         return (admin, secrets, accounts, connection);
     }
@@ -87,40 +63,26 @@ public class AccountAdminServiceTests
     [Fact]
     public async Task ReportsAMismatchWhenSteamIsSignedInAsSomebodyElse()
     {
-        var root = SteamRootWithFixture();
-        try
+        using var steam = new TempSteamRoot();
+        var (admin, _, _, connection) = await BuildAsync(steam.Path);
+        using (connection)
         {
-            var (admin, _, _, connection) = await BuildAsync(root);
-            using (connection)
-            {
-                Assert.NotNull(admin.Mismatch);
-                Assert.Equal(ActiveInFixture, admin.Mismatch.ActiveSteamId64);
-                Assert.Equal("currentuser", admin.Mismatch.ActiveAccountName);
-            }
-        }
-        finally
-        {
-            Directory.Delete(root, recursive: true);
+            Assert.NotNull(admin.Mismatch);
+            Assert.Equal(ActiveInFixture, admin.Mismatch.ActiveSteamId64);
+            Assert.Equal(TempSteamRoot.ActiveAccountName, admin.Mismatch.ActiveAccountName);
         }
     }
 
     [Fact]
     public async Task ReportsNoMismatchWhenSteamIsSignedInAsTheStoredAccount()
     {
-        var root = SteamRootWithFixture();
-        try
+        using var steam = new TempSteamRoot();
+        var (admin, _, accounts, connection) = await BuildAsync(steam.Path);
+        using (connection)
         {
-            var (admin, _, accounts, connection) = await BuildAsync(root);
-            using (connection)
-            {
-                accounts.Set(ActiveInFixture, "oustrix", "avatar");
+            accounts.Set(ActiveInFixture, "oustrix", "avatar");
 
-                Assert.Null(admin.Mismatch);
-            }
-        }
-        finally
-        {
-            Directory.Delete(root, recursive: true);
+            Assert.Null(admin.Mismatch);
         }
     }
 

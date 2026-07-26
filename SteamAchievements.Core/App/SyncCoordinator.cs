@@ -36,7 +36,12 @@ public sealed class SyncCoordinator : ISyncPresenter, ISyncController, IDisposab
     private readonly Lock _gate = new();
 
     private CancellationTokenSource? _cancellation;
-    private bool _pausing;
+
+    // Written under _gate, read once from the run's cancellation handler.
+    // Volatile rather than lock-guarded because a single bool needs nothing
+    // more than visibility.
+    private volatile bool _pausing;
+
     private SyncStatusView _status;
     private Task _completion = Task.CompletedTask;
 
@@ -48,12 +53,10 @@ public sealed class SyncCoordinator : ISyncPresenter, ISyncController, IDisposab
         _journal = journal;
         _now = now;
 
-        _status = _accounts.KeyRejectedAt is not null
-            ? new SyncStatusView(SyncPhase.KeyRejected, 0, 0, string.Empty,
-                "Steam rejected the API key", "Replace it in settings to continue.", null)
-            : _journal.LastSyncedAt is null
-                ? new SyncStatusView(SyncPhase.NeverRun, 0, 0, string.Empty, "Never synced", null, null)
-                : new SyncStatusView(SyncPhase.Idle, 0, 0, string.Empty, "Up to date", null, null);
+        _status =
+            _accounts.KeyRejectedAt is not null ? SyncStatusView.KeyRejected()
+            : _journal.LastSyncedAt is null ? SyncStatusView.NeverRun()
+            : SyncStatusView.Idle();
     }
 
     public SyncStatusView Status
@@ -88,7 +91,15 @@ public sealed class SyncCoordinator : ISyncPresenter, ISyncController, IDisposab
 
     public void Start(bool force)
     {
-        StoredAccount? account;
+        // Read outside the lock: this is a SQLite query, and nothing else in
+        // this class touches the account store under _gate.
+        var account = _accounts.Current;
+
+        if (account is null)
+        {
+            Publish(SyncStatusView.Failed(0, 0, "No Steam account is configured."));
+            return;
+        }
 
         lock (_gate)
         {
@@ -97,22 +108,10 @@ public sealed class SyncCoordinator : ISyncPresenter, ISyncController, IDisposab
                 return;
             }
 
-            account = _accounts.Current;
-
-            if (account is not null)
-            {
-                _pausing = false;
-                _cancellation = new CancellationTokenSource();
-                _status = new SyncStatusView(SyncPhase.Running, 0, 0, string.Empty, "Starting…", null, null);
-                _completion = RunAsync(account.SteamId64, force, _cancellation.Token);
-            }
-        }
-
-        if (account is null)
-        {
-            Publish(new SyncStatusView(SyncPhase.Failed, 0, 0, string.Empty,
-                "Sync failed", null, "No Steam account is configured."));
-            return;
+            _pausing = false;
+            _cancellation = new CancellationTokenSource();
+            _status = SyncStatusView.Starting();
+            _completion = RunAsync(account.SteamId64, force, _cancellation.Token);
         }
 
         Changed?.Invoke();
@@ -148,9 +147,7 @@ public sealed class SyncCoordinator : ISyncPresenter, ISyncController, IDisposab
             completed = report.Completed;
             total = report.Total;
 
-            Publish(new SyncStatusView(
-                SyncPhase.Running, report.Completed, report.Total, report.CurrentGame,
-                $"Syncing {report.Completed} of {report.Total}", report.CurrentGame, null));
+            Publish(SyncStatusView.Running(report.Completed, report.Total, report.CurrentGame));
         });
 
         try
@@ -159,38 +156,32 @@ public sealed class SyncCoordinator : ISyncPresenter, ISyncController, IDisposab
 
             var finishedAt = _now();
             _accounts.ClearKeyRejected();
-            _journal.RecordRun(new SyncRunRecord(startedAt, kind, completed, Elapsed(startedAt, finishedAt), null));
+            Record(startedAt, finishedAt, kind, completed, error: null);
             _journal.MarkSyncCompleted(finishedAt);
 
-            Publish(new SyncStatusView(SyncPhase.Idle, completed, total, string.Empty, "Up to date", null, null));
+            Publish(SyncStatusView.Idle(completed, total));
         }
         catch (OperationCanceledException)
         {
-            var paused = Paused();
-            _journal.RecordRun(new SyncRunRecord(
-                startedAt, kind, completed, Elapsed(startedAt, _now()), SyncJournal.Cancelled));
+            Record(startedAt, _now(), kind, completed, SyncJournal.Cancelled);
 
-            Publish(new SyncStatusView(
-                paused ? SyncPhase.Paused : SyncPhase.Idle, completed, total, string.Empty,
-                paused ? $"Paused at {completed} of {total}" : "Sync cancelled", null, null));
+            Publish(_pausing
+                ? SyncStatusView.Paused(completed, total)
+                : SyncStatusView.Cancelled(completed, total));
         }
         catch (SteamApiException e) when (e.Kind == SteamApiErrorKind.InvalidKey)
         {
             var finishedAt = _now();
             _accounts.MarkKeyRejected(finishedAt);
-            _journal.RecordRun(new SyncRunRecord(startedAt, kind, completed, Elapsed(startedAt, finishedAt), e.Message));
+            Record(startedAt, finishedAt, kind, completed, e.Message);
 
-            Publish(new SyncStatusView(
-                SyncPhase.KeyRejected, completed, total, string.Empty,
-                "Steam rejected the API key", "Replace it in settings to continue.", e.Message));
+            Publish(SyncStatusView.KeyRejected(completed, total, e.Message));
         }
         catch (Exception e)
         {
-            _journal.RecordRun(new SyncRunRecord(
-                startedAt, kind, completed, Elapsed(startedAt, _now()), e.Message));
+            Record(startedAt, _now(), kind, completed, e.Message);
 
-            Publish(new SyncStatusView(
-                SyncPhase.Failed, completed, total, string.Empty, "Sync failed", null, e.Message));
+            Publish(SyncStatusView.Failed(completed, total, e.Message));
         }
         finally
         {
@@ -202,15 +193,9 @@ public sealed class SyncCoordinator : ISyncPresenter, ISyncController, IDisposab
         }
     }
 
-    private bool Paused()
-    {
-        lock (_gate)
-        {
-            return _pausing;
-        }
-    }
-
-    private static long Elapsed(DateTimeOffset from, DateTimeOffset to) => (long)(to - from).TotalMilliseconds;
+    private void Record(DateTimeOffset startedAt, DateTimeOffset finishedAt, string kind, int completed, string? error) =>
+        _journal.RecordRun(new SyncRunRecord(
+            startedAt, kind, completed, (long)(finishedAt - startedAt).TotalMilliseconds, error));
 
     /// <summary>
     /// Assigns under the lock and raises outside it. Raising while holding the

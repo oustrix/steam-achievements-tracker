@@ -35,4 +35,18 @@ public class OnboardingStateTests
     {
         Assert.Equal(OnboardingStep.Ready, OnboardingState.Evaluate(SteamId, hasKey: true));
     }
+
+    [Fact]
+    public void SendsAFinishedUserToTheQueue()
+    {
+        Assert.Equal("/", OnboardingState.RouteFor(OnboardingStep.Ready));
+    }
+
+    [Theory]
+    [InlineData(OnboardingStep.ChooseAccount)]
+    [InlineData(OnboardingStep.EnterKey)]
+    public void SendsEveryUnfinishedStepToOnboarding(OnboardingStep step)
+    {
+        Assert.Equal("/onboarding", OnboardingState.RouteFor(step));
+    }
 }

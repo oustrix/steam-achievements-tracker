@@ -39,6 +39,29 @@ public static class Database
     }
 
     /// <summary>
+    /// A third connection, for the settings and journal writers.
+    ///
+    /// Carries <c>busy_timeout</c> because WAL permits exactly one writer: a
+    /// click on the accent picker while a sync holds the write lock would
+    /// otherwise fail outright with SQLITE_BUSY instead of waiting the
+    /// microseconds a single-row update takes.
+    ///
+    /// Skips <see cref="Migrate"/> for the same reason <see cref="OpenRead"/>
+    /// does — schema ownership belongs to the writer, which has already run it
+    /// against this file. Running it again would replay nine
+    /// <c>CREATE TABLE IF NOT EXISTS</c> statements and two
+    /// <c>pragma_table_info</c> scans before the window is shown, to no effect.
+    /// </summary>
+    public static SqliteConnection OpenSettings(string path)
+    {
+        var connection = new SqliteConnection($"Data Source={path}");
+        connection.Open();
+        connection.Execute(
+            "PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000;");
+        return connection;
+    }
+
+    /// <summary>
     /// Exposed so a migration can be applied to a connection that was opened
     /// by other means, and so tests can assert it is idempotent.
     /// </summary>

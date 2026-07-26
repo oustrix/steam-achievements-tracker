@@ -1,5 +1,4 @@
 using System.Net;
-using SteamAchievements.Core.Abstractions;
 using SteamAchievements.Core.App;
 using SteamAchievements.Core.Data;
 using SteamAchievements.Core.Presentation;
@@ -12,22 +11,6 @@ public class OnboardingServiceTests
 {
     private static readonly ulong SteamId = 76561190000000002;
     private const string Key = "0123456789abcdef0123456789abcdef";
-
-    private sealed class MemorySecretStore : ISecretStore
-    {
-        private string? _secret;
-
-        public string? Read() => _secret;
-
-        public void Write(string secret) => _secret = secret;
-
-        public void Clear() => _secret = null;
-    }
-
-    private sealed class NoSteam : ISteamPathProvider
-    {
-        public string? FindSteamPath() => null;
-    }
 
     /// <param name="keyCheck">
     /// How Steam answers the trial GetOwnedGames request that validates a
@@ -58,7 +41,7 @@ public class OnboardingServiceTests
             new(new HttpClient(keyCheck) { BaseAddress = new Uri("https://api.steampowered.com/") }, key);
 
         return (
-            new OnboardingService(accounts, secrets, new SteamAccountLocator(new NoSteam()), community, ClientFor),
+            new OnboardingService(accounts, secrets, new SteamAccountLocator(new FixedSteamPath(null)), community, ClientFor),
             secrets, accounts, connection);
     }
 

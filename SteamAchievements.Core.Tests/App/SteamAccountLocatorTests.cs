@@ -1,32 +1,14 @@
-using SteamAchievements.Core.Abstractions;
 using SteamAchievements.Core.App;
 
 namespace SteamAchievements.Core.Tests.App;
 
 public class SteamAccountLocatorTests
 {
-    private sealed class FixedPath(string? path) : ISteamPathProvider
-    {
-        public string? FindSteamPath() => path;
-    }
-
-    /// <summary>
-    /// The locator expects a Steam root and looks for config/loginusers.vdf
-    /// underneath it, so the committed fixture is copied into that shape.
-    /// </summary>
-    private static string SteamRootWithFixture()
-    {
-        var root = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());
-        Directory.CreateDirectory(Path.Combine(root, "config"));
-        File.Copy(TestPaths.Data("loginusers.vdf"), Path.Combine(root, "config", "loginusers.vdf"));
-        return root;
-    }
-
     [Fact]
     public void FindsNothingWhenSteamIsNotInstalled()
     {
-        Assert.Empty(new SteamAccountLocator(new FixedPath(null)).FindAccounts());
-        Assert.Null(new SteamAccountLocator(new FixedPath(null)).FindActiveAccount());
+        Assert.Empty(new SteamAccountLocator(new FixedSteamPath(null)).FindAccounts());
+        Assert.Null(new SteamAccountLocator(new FixedSteamPath(null)).FindActiveAccount());
     }
 
     [Fact]
@@ -36,7 +18,7 @@ public class SteamAccountLocatorTests
         Directory.CreateDirectory(empty);
         try
         {
-            Assert.Empty(new SteamAccountLocator(new FixedPath(empty)).FindAccounts());
+            Assert.Empty(new SteamAccountLocator(new FixedSteamPath(empty)).FindAccounts());
         }
         finally
         {
@@ -47,36 +29,24 @@ public class SteamAccountLocatorTests
     [Fact]
     public void ReadsTheAccountsOutOfTheLoginFile()
     {
-        var root = SteamRootWithFixture();
-        try
-        {
-            Assert.NotEmpty(new SteamAccountLocator(new FixedPath(root)).FindAccounts());
-        }
-        finally
-        {
-            Directory.Delete(root, recursive: true);
-        }
+        using var steam = new TempSteamRoot();
+
+        Assert.NotEmpty(new SteamAccountLocator(new FixedSteamPath(steam.Path)).FindAccounts());
     }
 
     [Fact]
     public void PicksTheAccountSteamMarkedMostRecent()
     {
-        var root = SteamRootWithFixture();
-        try
-        {
-            // The committed fixture holds two accounts: 76561190000000001
-            // ("olduser", MostRecent 0) and 76561190000000002 ("currentuser",
-            // MostRecent 1).
-            var active = new SteamAccountLocator(new FixedPath(root)).FindActiveAccount();
+        using var steam = new TempSteamRoot();
 
-            Assert.NotNull(active);
-            Assert.Equal(76561190000000002UL, active.SteamId64);
-            Assert.Equal("currentuser", active.AccountName);
-        }
-        finally
-        {
-            Directory.Delete(root, recursive: true);
-        }
+        // The committed fixture holds two accounts: 76561190000000001
+        // ("olduser", MostRecent 0) and 76561190000000002 ("currentuser",
+        // MostRecent 1).
+        var active = new SteamAccountLocator(new FixedSteamPath(steam.Path)).FindActiveAccount();
+
+        Assert.NotNull(active);
+        Assert.Equal(TempSteamRoot.ActiveSteamId, active.SteamId64);
+        Assert.Equal(TempSteamRoot.ActiveAccountName, active.AccountName);
     }
 
     [Fact]
@@ -87,7 +57,7 @@ public class SteamAccountLocatorTests
         File.WriteAllText(Path.Combine(root, "config", "loginusers.vdf"), "\"users\"\n{\n  \"7656119\"");
         try
         {
-            Assert.Empty(new SteamAccountLocator(new FixedPath(root)).FindAccounts());
+            Assert.Empty(new SteamAccountLocator(new FixedSteamPath(root)).FindAccounts());
         }
         finally
         {

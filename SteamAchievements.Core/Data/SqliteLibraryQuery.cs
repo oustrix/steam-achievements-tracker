@@ -123,33 +123,42 @@ public sealed class SqliteLibraryQuery : ILibraryQuery
                    error         AS Error
             FROM sync_runs ORDER BY started_at DESC LIMIT @Limit
             """, new { Limit = limit })
-            .Select(r => new SyncRunView(
-                Formatting.Timestamp(DateTimeOffset.Parse(r.StartedAt), now),
-                Describe(r),
-                Formatting.Duration(r.DurationMs),
-                Outcome(r.Error)))
+            .Select(r => Project(r, now))
             .ToList();
 
-    private static SyncRunOutcome Outcome(string? error) => error switch
+    private static SyncRunView Project(SyncRunRow run, DateTimeOffset now)
     {
-        null => SyncRunOutcome.Completed,
-        SyncJournal.Cancelled => SyncRunOutcome.Cancelled,
-        _ => SyncRunOutcome.Failed,
-    };
-
-    private static string Describe(SyncRunRow run)
-    {
-        if (run.Error == SyncJournal.Cancelled)
+        // Decoded once and passed on. The sentinel that distinguishes a
+        // cancelled run from a failed one lives in the error column, so it must
+        // appear in exactly one place — two switches over the same magic string
+        // are two things to keep in agreement.
+        var outcome = run.Error switch
         {
-            return $"Cancelled — {Formatting.Number(run.GamesSynced)} games";
+            null => SyncRunOutcome.Completed,
+            SyncJournal.Cancelled => SyncRunOutcome.Cancelled,
+            _ => SyncRunOutcome.Failed,
+        };
+
+        return new SyncRunView(
+            Formatting.Timestamp(DateTimeOffset.Parse(run.StartedAt), now),
+            Describe(run, outcome),
+            Formatting.Duration(run.DurationMs),
+            outcome);
+    }
+
+    private static string Describe(SyncRunRow run, SyncRunOutcome outcome)
+    {
+        var count = Formatting.Number(run.GamesSynced);
+
+        if (outcome == SyncRunOutcome.Cancelled)
+        {
+            return $"Cancelled — {count} games";
         }
 
-        if (run.Error is not null)
+        if (outcome == SyncRunOutcome.Failed)
         {
             return $"Failed — {run.Error}";
         }
-
-        var count = Formatting.Number(run.GamesSynced);
 
         return run.Kind switch
         {

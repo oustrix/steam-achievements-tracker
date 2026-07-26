@@ -1,16 +1,13 @@
 using System.Windows;
 using Microsoft.AspNetCore.Components.WebView.Wpf;
-using Microsoft.Extensions.DependencyInjection;
-using SteamAchievements.Core.Presentation;
+using SteamAchievements.Core.App;
 
 namespace SteamAchievements.Windows;
 
 public partial class MainWindow : Window
 {
-    private const string WebView2Download = "https://developer.microsoft.com/microsoft-edge/webview2/";
-
     private readonly HostStartup _startup;
-    private Action? _placeholderAction;
+    private string? _placardTarget;
 
     public MainWindow(HostStartup startup)
     {
@@ -22,28 +19,28 @@ public partial class MainWindow : Window
     {
         base.OnSourceInitialized(e);
 
-        if (_startup.FailureMessage is not null || _startup.Services is null)
-        {
-            ShowMessage(
-                $"The application could not open its database.\n\n{_startup.FailureMessage}\n\nData folder: {_startup.DataFolder}",
-                "Open data folder",
-                () => new ShellLinks(_startup.DataFolder).OpenDataFolder());
-            return;
-        }
+        // No services means composition failed, which always carries a message —
+        // but coalescing here rather than asserting it keeps "there is nothing
+        // to show the user" from being reachable at all.
+        var failure = _startup.Services is null
+            ? _startup.FailureMessage ?? "The application could not start."
+            : null;
 
-        if (!WebView2Probe.IsRuntimeInstalled())
+        // The decision and its wording live in Core, under dotnet test. All this
+        // window contributes is the one question that genuinely needs Windows.
+        var placard = HostStartupDecision.Evaluate(
+            failure, WebView2Probe.IsRuntimeInstalled(), _startup.DataFolder);
+
+        if (placard is not null)
         {
-            ShowMessage(
-                "This application needs the Microsoft Edge WebView2 runtime, which is not installed on this machine.",
-                "Install WebView2",
-                () => _startup.Services.GetRequiredService<IExternalLinks>().OpenUrl(WebView2Download));
+            ShowPlacard(placard);
             return;
         }
 
         var view = new BlazorWebView
         {
             HostPage = "wwwroot/index.html",
-            Services = _startup.Services,
+            Services = _startup.Services!,
             StartPath = _startup.StartPath,
         };
 
@@ -60,13 +57,19 @@ public partial class MainWindow : Window
         Root.Children.Add(view);
     }
 
-    private void ShowMessage(string message, string actionLabel, Action action)
+    private void ShowPlacard(HostPlacard placard)
     {
-        PlaceholderMessage.Text = message;
-        PlaceholderAction.Content = actionLabel;
+        PlaceholderMessage.Text = placard.Message;
+        PlaceholderAction.Content = placard.ActionLabel;
         PlaceholderAction.Visibility = Visibility.Visible;
-        _placeholderAction = action;
+        _placardTarget = placard.ActionTarget;
     }
 
-    private void OnPlaceholderAction(object sender, RoutedEventArgs e) => _placeholderAction?.Invoke();
+    private void OnPlaceholderAction(object sender, RoutedEventArgs e)
+    {
+        if (_placardTarget is not null)
+        {
+            _startup.Links.OpenUrl(_placardTarget);
+        }
+    }
 }

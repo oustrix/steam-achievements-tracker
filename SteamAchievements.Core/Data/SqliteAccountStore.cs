@@ -55,23 +55,11 @@ public sealed class SqliteAccountStore : IAccountStore
         Avatar = avatarUrl,
     });
 
-    public DateTimeOffset? KeyRejectedAt
-    {
-        get
-        {
-            var stored = _connection.QuerySingleOrDefault<string?>(
-                "SELECT key_rejected_at FROM settings WHERE id = 1");
+    public DateTimeOffset? KeyRejectedAt => Settings.ReadTimestamp(_connection, Column);
 
-            return stored is null ? null : DateTimeOffset.Parse(stored, CultureInfo.InvariantCulture);
-        }
-    }
+    public void MarkKeyRejected(DateTimeOffset at) => Settings.WriteTimestamp(_connection, Column, at);
 
-    public void MarkKeyRejected(DateTimeOffset at) => WriteRejection(at.ToString("o"));
+    public void ClearKeyRejected() => Settings.WriteTimestamp(_connection, Column, null);
 
-    public void ClearKeyRejected() => WriteRejection(null);
-
-    private void WriteRejection(string? value) => _connection.Execute("""
-        INSERT INTO settings (id, key_rejected_at) VALUES (1, @Value)
-        ON CONFLICT(id) DO UPDATE SET key_rejected_at = excluded.key_rejected_at;
-        """, new { Value = value });
+    private const string Column = "key_rejected_at";
 }

@@ -1,4 +1,3 @@
-using Dapper;
 using Microsoft.Data.Sqlite;
 using SteamAchievements.Core.Presentation;
 
@@ -18,11 +17,9 @@ public sealed class SqliteUserPreferences : IUserPreferences
 
     public SqliteUserPreferences(SqliteConnection connection) => _connection = connection;
 
-    public string? Accent =>
-        _connection.QuerySingleOrDefault<string?>("SELECT accent FROM settings WHERE id = 1");
+    public string? Accent => Settings.ReadText(_connection, Column);
 
-    public void SetAccent(string accent) => _connection.Execute("""
-        INSERT INTO settings (id, accent) VALUES (1, @Accent)
-        ON CONFLICT(id) DO UPDATE SET accent = excluded.accent;
-        """, new { Accent = accent });
+    public void SetAccent(string accent) => Settings.Write(_connection, Column, accent);
+
+    private const string Column = "accent";
 }
