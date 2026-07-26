@@ -14,7 +14,35 @@ public static class Database
         return connection;
     }
 
-    private static void Migrate(SqliteConnection connection)
+    /// <summary>
+    /// A second connection for readers — the UI — alongside the sync engine's
+    /// own. <see cref="GameRepository"/> is not thread-safe and
+    /// <c>SyncOrchestrator</c> already serializes every call to it behind a
+    /// lock; sharing that connection with the UI would put reads back inside
+    /// the same contention. WAL lets a reader run concurrently with the
+    /// writer, so the UI simply gets its own handle.
+    ///
+    /// Deliberately not <c>Mode=ReadOnly</c>: a read-only SQLite connection to
+    /// a WAL database still needs write access to the shared-memory index
+    /// file, so that mode fails in exactly the configuration this is for. The
+    /// guarantee here is by construction — callers issue only SELECTs — and
+    /// the name says so.
+    ///
+    /// Skips <see cref="Migrate"/>: schema ownership belongs to the writer.
+    /// </summary>
+    public static SqliteConnection OpenRead(string path)
+    {
+        var connection = new SqliteConnection($"Data Source={path}");
+        connection.Open();
+        connection.Execute("PRAGMA busy_timeout = 5000;");
+        return connection;
+    }
+
+    /// <summary>
+    /// Exposed so a migration can be applied to a connection that was opened
+    /// by other means, and so tests can assert it is idempotent.
+    /// </summary>
+    public static void Migrate(SqliteConnection connection)
     {
         connection.Execute("""
             CREATE TABLE IF NOT EXISTS settings (
@@ -84,8 +112,37 @@ public static class Database
                 completion_pct  REAL NOT NULL
             );
 
+            CREATE TABLE IF NOT EXISTS sync_runs (
+                started_at    TEXT PRIMARY KEY,
+                kind          TEXT    NOT NULL,
+                games_synced  INTEGER NOT NULL,
+                duration_ms   INTEGER NOT NULL,
+                error         TEXT
+            );
+
             CREATE INDEX IF NOT EXISTS ix_player_achievements_app
                 ON player_achievements (app_id);
             """);
+
+        // CREATE TABLE IF NOT EXISTS cannot add a column to a table that
+        // already exists, so anything added to an existing table after the
+        // first release needs this path.
+        EnsureColumn(connection, "settings", "accent", "TEXT");
+    }
+
+    /// <summary>
+    /// Idempotent ALTER TABLE. SQLite has no "ADD COLUMN IF NOT EXISTS", and
+    /// running the same ALTER twice throws "duplicate column name", so the
+    /// current shape is inspected first.
+    /// </summary>
+    private static void EnsureColumn(SqliteConnection connection, string table, string column, string type)
+    {
+        var existing = connection.Query<string>(
+            $"SELECT name FROM pragma_table_info('{table}')").ToHashSet();
+
+        if (!existing.Contains(column))
+        {
+            connection.Execute($"ALTER TABLE {table} ADD COLUMN {column} {type}");
+        }
     }
 }
