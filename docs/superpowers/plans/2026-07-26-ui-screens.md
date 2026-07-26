@@ -2011,6 +2011,7 @@ Replace `SteamAchievements.UI/_Imports.razor` with:
 @using Microsoft.AspNetCore.Components.Routing
 @using Microsoft.AspNetCore.Components.Web
 @using Microsoft.AspNetCore.Components.Web.Virtualization
+@using Microsoft.JSInterop
 @using SteamAchievements.Core.Presentation
 @using SteamAchievements.UI.Layout
 @using SteamAchievements.UI.Shared
@@ -3137,7 +3138,13 @@ public sealed record QueueCriteria(
 /// </summary>
 public static class QueueFilter
 {
-    public static IReadOnlyList<QueueRow> Apply(IReadOnlyList<QueueRow> rows, QueueCriteria criteria)
+    /// <summary>
+    /// Returns List rather than IReadOnlyList because Blazor's Virtualize
+    /// binds its Items parameter to ICollection, which IReadOnlyList does not
+    /// satisfy. Declaring what this actually builds beats making the caller
+    /// downcast to an implementation detail.
+    /// </summary>
+    public static List<QueueRow> Apply(IReadOnlyList<QueueRow> rows, QueueCriteria criteria)
     {
         var query = criteria.Query.Trim();
 
@@ -3637,7 +3644,7 @@ Replace `SteamAchievements.UI/Queue/QueuePage.razor`:
 
 @code {
     private QueueView _queue = new([], 0);
-    private IReadOnlyList<QueueRow> _rows = [];
+    private List<QueueRow> _rows = [];
     private double _maxEffort;
 
     protected override void OnInitialized()
@@ -3814,7 +3821,7 @@ Replace `SteamAchievements.UI/Queue/QueuePage.razor`:
     private const float RowHeight = 130;
 
     private QueueView _queue = new([], 0);
-    private IReadOnlyList<QueueRow> _rows = [];
+    private List<QueueRow> _rows = [];
     private double _maxEffort;
     private ElementReference _list;
     private bool _focusPending = true;
