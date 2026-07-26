@@ -38,14 +38,41 @@ public static class ReportPrinter
             ranked.Add((game, effort, DescribeRemaining(progress, effort)));
         }
 
-        var topRows = ranked
-            .Where(r => r.Effort.RemainingCount > 0)
+        // "What should I complete next" and "what should I start" are different
+        // questions with different answers, so they get separate lists rather
+        // than one queue with a filter flag. A game with 0% progress is not a
+        // suggestion to finish something — it is a suggestion to start
+        // something new, and burying 13 of those in the top 20 of a single
+        // list (as the live run did) makes the "finish" list useless.
+        var inProgress = ranked.Where(r => r.Effort.RemainingCount > 0 && r.Effort.UnlockedCount > 0)
             .OrderBy(r => r.Effort.RemainingEffort)
-            .Take(top)
             .ToList();
+        var notStarted = ranked.Where(r => r.Effort.RemainingCount > 0 && r.Effort.UnlockedCount == 0)
+            .OrderBy(r => r.Effort.RemainingEffort)
+            .ToList();
+        var fullyCompleted = ranked.Count(r => r.Effort.RemainingCount == 0);
+
+        PrintTable("Finish what you started", inProgress.Take(top).ToList());
+        PrintTable("Start something new", notStarted.Take(top).ToList());
+
+        var skippedNoAchievements = states.Values.Count(s => !s.HasAchievements);
 
         Console.WriteLine();
-        Console.WriteLine($"Top {topRows.Count} games by remaining effort:");
+        Console.WriteLine("Summary:");
+        Console.WriteLine($"  Total games:                {owned.Count}");
+        Console.WriteLine($"  Games with achievements:    {gamesWithAchievements}");
+        Console.WriteLine($"  In progress:                {inProgress.Count}");
+        Console.WriteLine($"  Not started:                {notStarted.Count}");
+        Console.WriteLine($"  Fully completed:            {fullyCompleted}");
+        Console.WriteLine($"  Skipped (no achievements):  {skippedNoAchievements}");
+        Console.WriteLine($"  Total HTTP requests:        {requestCount}");
+        Console.WriteLine($"  Wall-clock duration:        {elapsed:hh\\:mm\\:ss}");
+    }
+
+    private static void PrintTable(string title, IReadOnlyList<(OwnedGame Game, GameEffort Effort, string Why)> rows)
+    {
+        Console.WriteLine();
+        Console.WriteLine($"{title} — top {rows.Count} by remaining effort:");
         Console.WriteLine();
 
         var header = string.Format(
@@ -54,24 +81,14 @@ public static class ReportPrinter
         Console.WriteLine(header);
         Console.WriteLine(new string('-', header.Length + 20));
 
-        for (var i = 0; i < topRows.Count; i++)
+        for (var i = 0; i < rows.Count; i++)
         {
-            var (game, effort, why) = topRows[i];
+            var (game, effort, why) = rows[i];
             var progressText = $"{effort.UnlockedCount}/{effort.TotalCount}";
             Console.WriteLine(string.Format(
                 "{0,4}  {1,-" + NameColumnWidth + "}  {2,-11}  {3,5:F1}%  {4,8:F2}  {5}",
                 i + 1, Truncate(game.Name, NameColumnWidth), progressText, effort.CompletionPercent, effort.RemainingEffort, why));
         }
-
-        var skippedNoAchievements = states.Values.Count(s => !s.HasAchievements);
-
-        Console.WriteLine();
-        Console.WriteLine("Summary:");
-        Console.WriteLine($"  Total games:                {owned.Count}");
-        Console.WriteLine($"  Games with achievements:    {gamesWithAchievements}");
-        Console.WriteLine($"  Skipped (no achievements):  {skippedNoAchievements}");
-        Console.WriteLine($"  Total HTTP requests:        {requestCount}");
-        Console.WriteLine($"  Wall-clock duration:        {elapsed:hh\\:mm\\:ss}");
     }
 
     private static string DescribeRemaining(IReadOnlyList<AchievementProgress> progress, GameEffort effort)
