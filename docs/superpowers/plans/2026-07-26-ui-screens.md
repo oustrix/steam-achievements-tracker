@@ -5168,7 +5168,11 @@ Create `SteamAchievements.UI/Onboarding/OnboardingPage.razor.css`:
     background: var(--bg-card);
 }
 
-.card.key { border-color: var(--warn-border); background: #1c1811; }
+/* The mockup paints this card #1c1811. That is (28,24,17) against --warn-bg's
+   (33,26,18) — at most 5/255 on a channel, which is not perceptible across a
+   card background. Reusing the token beats adding a near-duplicate to the
+   palette, since near-duplicate tokens are what make a palette hard to use. */
+.card.key { border-color: var(--warn-border); background: var(--warn-bg); }
 .card.dim { opacity: 0.55; gap: 12px; }
 
 .head { display: flex; flex-direction: column; gap: 5px; }
