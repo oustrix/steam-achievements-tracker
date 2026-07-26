@@ -64,8 +64,9 @@ known limitations.
 ## What it does
 
 - Pulls your full Steam library and achievement progress
-- Ranks games by remaining effort, with a plain-language reason for each
-  position — *"3 left: two common, one rare (2.1%)"*
+- Two ranked lists — *finish what you started* and *start something new* — each
+  with a plain-language reason for every position, such as
+  *"3 left, rarest 5.6%"*
 - Per-game view: what is left, sorted easiest first, with rarity for each
 - Works offline once synced — everything is cached locally in SQLite
 
@@ -105,7 +106,7 @@ API and Steam's image CDN.
 ## Building from source
 
 ```bash
-dotnet test SteamAchievements.Core.Tests    # 74 logic tests, run anywhere
+dotnet test SteamAchievements.Core.Tests    # 76 logic tests, run anywhere
 dotnet publish SteamAchievements.Windows -r win-x64 -c Release   # Windows only
 ```
 
