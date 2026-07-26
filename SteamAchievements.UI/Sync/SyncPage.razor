@@ -1,7 +1,11 @@
 @page "/sync"
+@implements IDisposable
+@using Microsoft.Data.Sqlite
 @inject ILibraryQuery Library
 @inject IClock Clock
 @inject ISyncPresenter Sync
+@inject ISyncController Controller
+@inject LibraryChangeSignal LibraryChanged
 @inject NavigationManager Navigation
 
 <PageTitle>Sync</PageTitle>
@@ -13,12 +17,19 @@
            changed are skipped entirely.</p>
     </div>
 
-    <SyncProgressCard Status="_status" />
+    <SyncProgressCard Status="_status" OnPrimary="Primary" OnCancel="() => Controller.Cancel()" />
+
+    @if (_status.Phase == SyncPhase.Idle && _status.Problem == SyncProblem.None)
+    {
+        <button class="resync" type="button" @onclick="() => Controller.Start(force: true)">
+            Full resync
+        </button>
+    }
 
     @if (_status.AlertTitle is not null)
     {
         <Notice Severity="NoticeSeverity.Warning" Title="@_status.AlertTitle"
-                ActionLabel="Retry now">
+                ActionLabel="Retry now" OnAction="() => Controller.Start(force: false)">
             <Body>@_status.AlertBody</Body>
         </Notice>
     }
@@ -80,7 +91,53 @@
     {
         _status = Sync.Status;
         _history = Library.GetSyncHistory(20, Clock.Now);
+
+        Sync.Changed += HandleStatusChanged;
+        LibraryChanged.Changed += HandleLibraryChanged;
+    }
+
+    // Changed arrives on the sync engine's worker thread. Reading ILibraryQuery
+    // from there is concurrent use of a single SqliteConnection, which corrupts
+    // rather than throws — InvokeAsync is what serializes it.
+    private void HandleStatusChanged() => InvokeAsync(() =>
+    {
+        _status = Sync.Status;
+        StateHasChanged();
+    });
+
+    private void HandleLibraryChanged() => InvokeAsync(() =>
+    {
+        try
+        {
+            _history = Library.GetSyncHistory(20, Clock.Now);
+        }
+        catch (SqliteException)
+        {
+            // A re-read racing the write that has just finished. The previous
+            // history stays on screen and the next signal tries again; letting
+            // it out tears down the circuit and leaves an empty window.
+            return;
+        }
+
+        StateHasChanged();
+    });
+
+    private void Primary()
+    {
+        if (_status.Phase == SyncPhase.Running)
+        {
+            Controller.Pause();
+            return;
+        }
+
+        Controller.Start(force: false);
     }
 
     private void OpenSettings() => Navigation.NavigateTo("settings");
+
+    public void Dispose()
+    {
+        Sync.Changed -= HandleStatusChanged;
+        LibraryChanged.Changed -= HandleLibraryChanged;
+    }
 }

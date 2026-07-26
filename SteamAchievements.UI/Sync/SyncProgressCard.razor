@@ -1,6 +1,6 @@
 <div class="card">
     <div class="head">
-        <span class="title">@Title</span>
+        <span class="title">@Controls.Title</span>
         @if (Status.Total > 0)
         {
             <span class="num counter">
@@ -17,10 +17,15 @@
     </div>
 
     <div class="actions">
-        <button class="primary" disabled="@Disabled">
-            @(Status.Phase == SyncPhase.Paused ? "Resume" : "Pause")
+        <button class="primary" type="button" disabled="@(!Controls.PrimaryEnabled)" @onclick="OnPrimary">
+            @Controls.PrimaryLabel
         </button>
-        <button class="ghost" disabled="@Disabled">Cancel</button>
+
+        @if (Controls.ShowCancel)
+        {
+            <button class="ghost" type="button" @onclick="OnCancel">Cancel</button>
+        }
+
         <span class="spacer"></span>
         <span class="note">Progress is saved — closing the app is safe</span>
     </div>
@@ -29,13 +34,12 @@
 @code {
     [Parameter, EditorRequired] public SyncStatusView Status { get; set; } = default!;
 
-    private bool Disabled => Status.Phase == SyncPhase.Idle;
+    [Parameter] public EventCallback OnPrimary { get; set; }
 
-    private string Title => Status.Phase switch
-    {
-        SyncPhase.Running => "Full sync in progress",
-        SyncPhase.Paused => "Sync paused",
-        SyncPhase.CircuitOpen => "Sync waiting to retry",
-        _ => "No sync running",
-    };
+    [Parameter] public EventCallback OnCancel { get; set; }
+
+    // Recomputed on every render rather than cached in OnParametersSet: it is a
+    // pure function of one parameter, and a cached copy is how the two fall out
+    // of step.
+    private SyncControlsView Controls => SyncControls.For(Status);
 }

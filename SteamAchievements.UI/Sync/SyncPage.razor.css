@@ -12,3 +12,17 @@
 
 .history { display: flex; flex-direction: column; gap: 9px; }
 .empty { margin: 0; font-size: 13px; color: var(--text-dim); }
+
+.resync {
+    align-self: flex-start;
+    font: inherit;
+    font-size: 12px;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: var(--text-muted);
+    text-decoration: underline;
+    cursor: pointer;
+}
+
+.resync:hover { color: var(--text-secondary); }
