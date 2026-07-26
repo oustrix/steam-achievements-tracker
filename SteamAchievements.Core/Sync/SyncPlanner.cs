@@ -31,16 +31,28 @@ public static class SyncPlanner
                 continue;
             }
 
-            var neverSynced = state is null || state.SyncedPlaytime < 0;
-
-            var needSchema = force || neverSynced || state!.SchemaSyncedAt is null
+            // Schema and global percentages are refreshed off their own TTLs,
+            // not off whether the game ever completed a *full* sync. Keying
+            // them off "never synced" meant a game whose player-achievements
+            // call failed after schema and global both succeeded (rate
+            // limit, transient 5xx, circuit breaker) would permanently
+            // re-fetch schema and global on every later run even though both
+            // are still well inside their TTLs. A never-encountered game has
+            // null timestamps, so it still gets everything on first
+            // encounter — the null case already covers what the old
+            // "never synced" flag was standing in for.
+            var needSchema = force || state is null || state.SchemaSyncedAt is null
                 || now - state.SchemaSyncedAt.Value > options.SchemaTtl;
 
-            var needGlobal = force || neverSynced || state!.GlobalSyncedAt is null
+            var needGlobal = force || state is null || state.GlobalSyncedAt is null
                 || now - state.GlobalSyncedAt.Value > options.GlobalTtl;
 
-            // The core optimization: unchanged playtime means unchanged achievements.
-            var needPlayer = force || neverSynced || game.PlaytimeForever != state!.SyncedPlaytime;
+            // The core optimization: unchanged playtime means unchanged
+            // achievements. A negative SyncedPlaytime means the
+            // player-achievements call never completed for this game, so it
+            // must be retried regardless of playtime.
+            var needPlayer = force || state is null || state.SyncedPlaytime < 0
+                || game.PlaytimeForever != state.SyncedPlaytime;
 
             if (needSchema || needGlobal || needPlayer)
             {

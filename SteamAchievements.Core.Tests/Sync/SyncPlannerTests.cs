@@ -112,6 +112,30 @@ public class SyncPlannerTests
     }
 
     [Fact]
+    public void DoesNotRefetchFreshSchemaOrGlobalAfterPlayerSyncFailedMidRun()
+    {
+        // Schema and global both completed recently, but the player-
+        // achievements call never finished — SyncedPlaytime is still the
+        // sentinel -1 that MarkSynced would have overwritten. This happens
+        // when a sync is interrupted (rate limit, transient 5xx, circuit
+        // breaker) after schema and global succeed but before the player
+        // call does. Schema and global are both well inside their TTLs and
+        // must not be re-fetched; only the player call should be retried.
+        var plan = SyncPlanner.Plan(
+            [Game(292030, 100)],
+            new Dictionary<uint, GameSyncState>
+            {
+                [292030] = State(292030, syncedPlaytime: -1, schemaAt: Now, globalAt: Now),
+            },
+            Now, SyncOptions.Default, force: false);
+
+        var item = Assert.Single(plan);
+        Assert.False(item.NeedSchema);
+        Assert.False(item.NeedGlobal);
+        Assert.True(item.NeedPlayer);
+    }
+
+    [Fact]
     public void OrdersRecentlyPlayedGamesFirst()
     {
         var plan = SyncPlanner.Plan(
