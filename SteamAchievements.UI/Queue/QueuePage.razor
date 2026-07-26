@@ -51,7 +51,8 @@
     protected override void OnInitialized()
     {
         _queue = Library.GetQueue(Clock.Now);
-        State.Changed += Refresh;
+        State.CriteriaChanged += Refresh;
+        State.SelectionChanged += Rerender;
         Refresh();
     }
 
@@ -74,7 +75,20 @@
         }
     }
 
-    public void Dispose() => State.Changed -= Refresh;
+    public void Dispose()
+    {
+        State.CriteriaChanged -= Refresh;
+        State.SelectionChanged -= Rerender;
+    }
+
+    /// <summary>
+    /// The response to a selection change. Which rows are visible and how the
+    /// effort bars scale are both unaffected by it, so this deliberately does
+    /// not re-run the filter: a mouse sweep down the list raises one selection
+    /// change per row crossed, and filtering the whole library that often is
+    /// the difference between a smooth list and a stuttering one.
+    /// </summary>
+    private void Rerender() => StateHasChanged();
 
     private void Refresh()
     {

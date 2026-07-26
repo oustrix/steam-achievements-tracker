@@ -13,7 +13,21 @@ public sealed class QueueState
     public QueueCriteria Criteria { get; private set; } = QueueCriteria.Default;
     public uint? SelectedAppId { get; private set; }
 
-    public event Action? Changed;
+    /// <summary>
+    /// Sort, search, minimum playtime or hide-complete changed, so the visible
+    /// list has to be filtered and sorted again.
+    /// </summary>
+    public event Action? CriteriaChanged;
+
+    /// <summary>
+    /// Only the selected row changed. Deliberately a separate event: hovering
+    /// the queue selects a row per pointer crossing and every arrow keypress
+    /// moves the selection, and re-running the filter over the whole library
+    /// for that would cost a Where/OrderBy/ToList over ~1500 rows each time.
+    /// Selection changes nothing about which rows are visible — a re-render is
+    /// the whole response.
+    /// </summary>
+    public event Action? SelectionChanged;
 
     /// <summary>Picking the active sort again flips its direction, as in the mockup.</summary>
     public void SortBy(QueueSort sort) => Update(Criteria with
@@ -38,12 +52,12 @@ public sealed class QueueState
         }
 
         SelectedAppId = appId;
-        Changed?.Invoke();
+        SelectionChanged?.Invoke();
     }
 
     private void Update(QueueCriteria criteria)
     {
         Criteria = criteria;
-        Changed?.Invoke();
+        CriteriaChanged?.Invoke();
     }
 }
