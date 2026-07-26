@@ -650,3 +650,48 @@ rather than consuming them.
 Beyond design doc §10: vanity URL resolution, remembering window placement, a
 `--data-dir` override, several accounts side by side, true suspension inside
 `SyncOrchestrator`, and installing the WebView2 runtime automatically.
+
+## 12. Divergences from this spec during implementation
+
+Recorded during execution rather than reconstructed afterwards.
+
+- **`LiveSyncRunner` was added to `Core/Sync`.** §5.2 described only a
+  "five-line adapter over the real orchestrator". It turned out to need
+  `ISecretStore`, because the key can be replaced while the application runs and
+  a `SyncOrchestrator` built once at startup would keep using the old one. It
+  also became the natural home for "no key is stored", which it reports as
+  `InvalidKey` so the state machine lands on the screen that can fix it.
+- **`SyncCoordinator` uses a private `InlineProgress<T>` rather than
+  `System.Progress<T>`.** `Progress<T>` captures a SynchronizationContext and
+  posts asynchronously, which would let the recorded `games_synced` lag behind
+  the run it belongs to and would make the pause test a race. The coordinator's
+  tests run in 52 ms and were stable across five consecutive runs because of
+  this choice.
+- **`SyncCoordinator.Completion` is public.** §5.2 did not mention it. The
+  composition root needs it to await an in-flight sync before disposing the
+  SQLite connections; without it, shutdown during a sync leaves the
+  orchestrator's worker pool writing into disposed handles.
+- **`SyncJournal.MarkSyncCompleted` writes `settings.last_full_sync_at` after
+  every successful run, not only after a full one.** The column name predates
+  the distinction and the sidebar reads it as "last sync".
+- **`IOnboarding.SubmitKeyAsync` replaced a synchronous `SubmitKey`, and returns
+  four outcomes rather than a boolean.** Found by reviewing the plan against
+  §8's error table: that table has a row for a key Steam rejects during
+  onboarding, but the service as first drafted only checked the format, so the
+  row described a state the code could not reach. See §5.4.
+- **`Routes.razor` in the WPF host carries a `<NotFound>` section.** Not in the
+  plan. The host sends a first-run user to `/onboarding`, which the UI project
+  has not built yet, and a `Router` without `NotFound` renders nothing at all —
+  the blank window this design exists to avoid. It will stay useful after that
+  route lands.
+- **`SyncRunView.Failed` became `SyncRunOutcome Outcome`** (§4.3), which also
+  required updating `SteamAchievements.Preview`'s fixture query. Caught by
+  building the preview host immediately after the change rather than at the end.
+- **The assembly is still named `SteamAchievements.Windows`,** so the published
+  artifact is `SteamAchievements.Windows.exe`. Renaming it would be nicer for a
+  download but changes the isolated-CSS bundle name in `index.html` too; it is a
+  cosmetic change and was left for its own commit.
+- **Not verified on Windows yet.** Everything in §6, §7 and §10 is written but
+  unexecuted. §9.1 is the checklist for the first push, and until it has been
+  run this section cannot claim the host works — only that it compiles the parts
+  macOS can compile.

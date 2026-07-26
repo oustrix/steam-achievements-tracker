@@ -126,6 +126,20 @@ Deliberately out of scope for the first release, in rough order of likelihood:
   answer "is this still obtainable?" — far future, see the
   [design doc](docs/specs/2026-07-26-steam-achievements-tracker-design.md)
 
+## Requirements
+
+Windows 10 or 11, and the Microsoft Edge WebView2 runtime.
+
+WebView2 ships with Microsoft Edge and is present on almost every up-to-date
+Windows installation. If it is missing, the application says so on startup and
+links to the installer rather than showing an empty window. It can also be
+installed ahead of time from
+<https://developer.microsoft.com/microsoft-edge/webview2/>.
+
+The application is distributed as a single unsigned `.exe`. SmartScreen will
+warn about it on first run; that is expected, and the reasoning is in the design
+document under "Explicitly out of scope".
+
 ## Documentation
 
 - [Design document](docs/specs/2026-07-26-steam-achievements-tracker-design.md) —

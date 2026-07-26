@@ -65,15 +65,19 @@ about your change.
 
 ## Current state
 
-`SteamAchievements.Core` is complete and covered by 74 tests: VDF parsing,
-reading the logged-in account, the Steam API client with its error taxonomy,
-SQLite storage, the sync planner and orchestrator, and the ranking formula.
+`SteamAchievements.Core` holds all the logic and is covered by unit tests: VDF
+parsing, the logged-in account, the Steam API client and its error taxonomy, the
+public profile endpoint, SQLite storage, the sync planner and orchestrator, the
+sync state machine, onboarding, account administration, and the ranking formula.
 
-Not built yet: everything the user can see. The WPF host is an empty window,
-`SteamAchievements.UI` still holds Razor template boilerplate, and the
-`ISteamPathProvider` / `ISecretStore` implementations, onboarding and screens
-belong to a follow-up plan. The `settings` table and `sync_state.last_error`
-are written but nothing reads them yet — that is expected, not an oversight.
+`SteamAchievements.UI` holds the Blazor components. `SteamAchievements.Preview`
+is a development-only host that renders them from macOS against fixtures.
+`SteamAchievements.Windows` is the real host: a WPF window with a
+`BlazorWebView`, plus the four Windows-only classes — registry, DPAPI, shell,
+WebView2 probe.
+
+Data lives in `%LOCALAPPDATA%\SteamAchievementsTracker\`: `library.db` and
+`apikey.bin`.
 
 ## Facts learned the hard way
 
@@ -95,6 +99,25 @@ These cost real debugging time. Do not rediscover them.
   than one file.
 - **Steam's error responses are HTML, not JSON**, and a missing key returns 400
   or 401 depending on the endpoint. See `docs/steam-api.md`.
+- **The publish check needs `-Recurse`.** `Get-ChildItem publish -File` does not
+  see subdirectories, and both WebView2's loader and BlazorWebView's static
+  assets publish into them. Without `-Recurse` the check passes green on an
+  artifact that is not a single file.
+- **`Microsoft.Web.WebView2` copies its loader twice.** Its `Common.targets`
+  adds `WebView2Loader.dll` as a `Content` item linked into
+  `runtimes\win-x64\native\`, separately from the RID asset `PublishSingleFile`
+  bundles. `WebView2NeverCopyLoaderDllToOutputDirectory` turns the extra copy
+  off.
+- **The isolated-CSS bundle is named after the host assembly.** The WPF host
+  links `SteamAchievements.Windows.styles.css`; Preview links
+  `SteamAchievements.Preview.styles.css`. Getting it wrong gives a fully working
+  but completely unstyled application.
+- **DPAPI `CurrentUser` blobs are unreadable from another Windows profile.**
+  `DpapiSecretStore.Read` catches `CryptographicException` and returns null,
+  which is the same state as "no key stored". That is deliberate, not a
+  swallowed error.
+- **A `<Router>` with no `<NotFound>` renders nothing.** Not an error, not a
+  message — a blank window. The WPF host's `Routes.razor` carries one.
 
 ## Reviewing your own plans
 

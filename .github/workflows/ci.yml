@@ -40,7 +40,11 @@ jobs:
       - name: Verify the publish output really is a single file
         shell: pwsh
         run: |
-          $files = Get-ChildItem publish -File
+          # -Recurse is load-bearing. Without it this step cannot see
+          # subdirectories, and both the WebView2 loader and the BlazorWebView
+          # static assets publish into subdirectories — so it would pass green
+          # on an artifact that is not a single file at all.
+          $files = Get-ChildItem publish -File -Recurse
           $files | ForEach-Object { "{0}  {1:N0} bytes" -f $_.Name, $_.Length }
           if ($files.Count -ne 1) {
             throw "Expected exactly one published file, found $($files.Count). PublishSingleFile is not packing everything."
