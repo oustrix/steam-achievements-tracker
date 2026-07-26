@@ -83,8 +83,17 @@ public sealed class GameRepository
         // legitimately be synced for a game the caller hasn't (yet) upserted via
         // UpsertOwnedGames in this connection's lifetime, so ensure a placeholder
         // row exists; UpsertOwnedGames' real name/icon_hash values win on conflict.
+        //
+        // sync_state must get the same placeholder treatment: the bookkeeping
+        // UPDATE below (schema_synced_at) is a silent no-op against a WHERE
+        // clause matching zero rows, which would leave schema_synced_at NULL
+        // forever and make Task 7's 30-day TTL check treat the schema as
+        // perpetually stale.
         _connection.Execute(
             "INSERT INTO games (app_id, name) VALUES (@AppId, '') ON CONFLICT(app_id) DO NOTHING",
+            new { AppId = appId }, transaction);
+        _connection.Execute(
+            "INSERT INTO sync_state (app_id) VALUES (@AppId) ON CONFLICT(app_id) DO NOTHING",
             new { AppId = appId }, transaction);
 
         foreach (var achievement in schema)
@@ -149,6 +158,14 @@ public sealed class GameRepository
     {
         using var transaction = _connection.BeginTransaction();
         var now = DateTimeOffset.UtcNow.ToString("o");
+
+        // Same gap as UpsertSchema: global percentages can be synced for a game
+        // whose sync_state row doesn't exist yet, which would make the
+        // bookkeeping UPDATE below a silent no-op and leave global_synced_at
+        // NULL forever.
+        _connection.Execute(
+            "INSERT INTO sync_state (app_id) VALUES (@AppId) ON CONFLICT(app_id) DO NOTHING",
+            new { AppId = appId }, transaction);
 
         foreach (var (apiName, percent) in percentages)
         {

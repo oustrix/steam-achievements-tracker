@@ -55,6 +55,53 @@ public class GameRepositoryTests
     }
 
     [Fact]
+    public void UpsertSchemaCreatesSyncStateForGameNeverSeenInOwnedGames()
+    {
+        var repository = InMemory();
+        var schema = new AchievementSchema("ACH_1", "First", "desc", "i", "g", false, 0);
+        var syncedAt = DateTimeOffset.UnixEpoch.AddDays(1);
+
+        repository.UpsertSchema(292030, [schema], syncedAt);
+
+        var states = repository.GetSyncStates();
+        Assert.True(states.ContainsKey(292030));
+        Assert.Equal(syncedAt, states[292030].SchemaSyncedAt);
+    }
+
+    [Fact]
+    public void UpsertGlobalPercentagesCreatesSyncStateForGameNeverSeenInOwnedGames()
+    {
+        var repository = InMemory();
+        var before = DateTimeOffset.UtcNow;
+
+        repository.UpsertGlobalPercentages(292030, new Dictionary<string, double> { ["ACH_1"] = 62.4 });
+
+        var after = DateTimeOffset.UtcNow;
+        var states = repository.GetSyncStates();
+        Assert.True(states.ContainsKey(292030));
+        var globalSyncedAt = states[292030].GlobalSyncedAt;
+        Assert.NotNull(globalSyncedAt);
+        Assert.InRange(globalSyncedAt!.Value, before.AddSeconds(-1), after.AddSeconds(1));
+    }
+
+    [Fact]
+    public void UpsertSchemaAndUpsertGlobalPercentagesStillWorkWhenOwnedGamesUpsertedFirst()
+    {
+        var repository = InMemory();
+        repository.UpsertOwnedGames([new OwnedGame(292030, "The Witcher 3", "abc", 100, 0, null)]);
+        var schema = new AchievementSchema("ACH_1", "First", "desc", "i", "g", false, 0);
+        var schemaSyncedAt = DateTimeOffset.UnixEpoch.AddDays(1);
+
+        repository.UpsertSchema(292030, [schema], schemaSyncedAt);
+        repository.UpsertGlobalPercentages(292030, new Dictionary<string, double> { ["ACH_1"] = 62.4 });
+
+        var states = repository.GetSyncStates();
+        Assert.Single(states);
+        Assert.Equal(schemaSyncedAt, states[292030].SchemaSyncedAt);
+        Assert.NotNull(states[292030].GlobalSyncedAt);
+    }
+
+    [Fact]
     public void MarkNoAchievementsStopsGameFromBeingSyncedAgain()
     {
         var repository = InMemory();
