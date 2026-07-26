@@ -1964,11 +1964,14 @@ The code block:
         {
             _history = Library.GetSyncHistory(20, Clock.Now);
         }
-        catch (SqliteException)
+        // 5 and 6 are SQLITE_BUSY and SQLITE_LOCKED: a re-read racing the write
+        // that has just finished. The previous history stays on screen and the
+        // next signal tries again; letting those out tears down the circuit and
+        // leaves an empty window. Every other error code — a broken query, a
+        // corrupt file, a full disk — is not this race and must not be
+        // swallowed forever behind stale data.
+        catch (SqliteException e) when (e.SqliteErrorCode is 5 or 6)
         {
-            // A re-read racing the write that has just finished. The previous
-            // history stays on screen and the next signal tries again; letting
-            // it out tears down the circuit and leaves an empty window.
             return;
         }
 
@@ -2235,7 +2238,10 @@ git commit -m "feat: let the sync screen start, pause and cancel a sync"
         {
             Read();
         }
-        catch (SqliteException)
+        // SQLITE_BUSY and SQLITE_LOCKED only — the race against a sync that has
+        // just finished writing. Any other code is a real failure and must not
+        // be swallowed forever behind stale data.
+        catch (SqliteException e) when (e.SqliteErrorCode is 5 or 6)
         {
             return;
         }
@@ -2409,7 +2415,10 @@ git commit -m "feat: let settings change the account, the key and the database"
         {
             _summary = Library.GetSummary(Clock.Now);
         }
-        catch (SqliteException)
+        // SQLITE_BUSY and SQLITE_LOCKED only — the race against a sync that has
+        // just finished writing. Any other code is a real failure and must not
+        // be swallowed forever behind stale data.
+        catch (SqliteException e) when (e.SqliteErrorCode is 5 or 6)
         {
             return;
         }
@@ -2455,7 +2464,10 @@ git commit -m "feat: let settings change the account, the key and the database"
         {
             _queue = Library.GetQueue(Clock.Now);
         }
-        catch (SqliteException)
+        // SQLITE_BUSY and SQLITE_LOCKED only — the race against a sync that has
+        // just finished writing. Any other code is a real failure and must not
+        // be swallowed forever behind stale data.
+        catch (SqliteException e) when (e.SqliteErrorCode is 5 or 6)
         {
             return;
         }
