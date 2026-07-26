@@ -5302,7 +5302,7 @@ Run: `dotnet run --project SteamAchievements.Preview` and confirm each of these 
 | `/` | Sort buttons flip direction; search narrows; playtime filter applies; complete-toggle shows Celeste and Portal 2 dimmed |
 | `/` | ↑↓ move the selection and scroll it into view; Enter opens the game |
 | `/game/367520` | Banner, two stat cards, remaining cheapest-first, hidden achievement explained |
-| `/game/435150` | "Rarity data unavailable" notice |
+| `/game/435150?scenario=rarity-unknown` | "Rarity data unavailable" notice. The scenario is required: the fixture's Divinity has rarity for most of its locked achievements, so the plain URL correctly shows percentages and no notice. Verified — the plain URL does not render the notice. |
 | `/game/1` | "That game is not in your library" |
 | `/sync` | Progress card, four history rows |
 | `/sync?scenario=invalid-key` | Two notices, "No syncs recorded yet.", disabled buttons |
