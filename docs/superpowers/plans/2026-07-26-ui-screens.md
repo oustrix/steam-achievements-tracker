@@ -1621,13 +1621,36 @@ public class SqliteLibraryQueryTests
     public void HandlesAGameWithNoRarityDataAtAll()
     {
         using var connection = Seed();
-        new GameRepository(connection).UpsertSchema(435150,
+        var repository = new GameRepository(connection);
+
+        // Ownership first: the queue joins against owned_games, so a schema
+        // without an owned_games row would correctly never appear (see the
+        // next test).
+        repository.UpsertOwnedGames(
+            [new OwnedGame(435150, "Divinity: Original Sin 2", "dos2", 3720, 0, Now.AddDays(-365))]);
+        repository.UpsertSchema(435150,
             [new AchievementSchema("D_1", "Rise", "desc", "i", "g", false, 0)], Now);
 
         var row = new SqliteLibraryQuery(connection).GetQueue(Now).Rows.Single(r => r.AppId == 435150);
 
         Assert.True(row.RarityUnknown);
         Assert.Equal("1 left, rarity unknown for all of them", row.Reason);
+    }
+
+    [Fact]
+    public void ExcludesAGameWhoseSchemaIsCachedButIsNoLongerOwned()
+    {
+        // A cached achievement schema is not ownership. Steam schema can
+        // legitimately remain cached for a game the library no longer
+        // contains, and blending unowned games into the ranking would make it
+        // meaningless — so the join against owned_games is deliberate.
+        using var connection = Seed();
+        new GameRepository(connection).UpsertSchema(220,
+            [new AchievementSchema("HL2_1", "Defiant", "desc", "i", "g", false, 0)], Now);
+
+        var queue = new SqliteLibraryQuery(connection).GetQueue(Now);
+
+        Assert.DoesNotContain(queue.Rows, r => r.AppId == 220);
     }
 
     [Fact]
