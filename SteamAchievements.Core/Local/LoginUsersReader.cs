@@ -14,20 +14,36 @@ public static class LoginUsersReader
                 continue;
             }
 
-            _ = long.TryParse(node["Timestamp"].Value, out var timestamp);
+            if (!long.TryParse(node["Timestamp"].Value, out var timestamp))
+            {
+                // Skip entries with unparseable timestamps
+                continue;
+            }
 
-            accounts.Add(new SteamAccount(
-                steamId,
-                node["AccountName"].Value ?? string.Empty,
-                node["PersonaName"].Value ?? string.Empty,
-                node["MostRecent"].Value == "1",
-                DateTimeOffset.FromUnixTimeSeconds(timestamp)));
+            try
+            {
+                accounts.Add(new SteamAccount(
+                    steamId,
+                    node["AccountName"].Value ?? string.Empty,
+                    node["PersonaName"].Value ?? string.Empty,
+                    node["MostRecent"].Value == "1",
+                    DateTimeOffset.FromUnixTimeSeconds(timestamp)));
+            }
+            catch (ArgumentOutOfRangeException)
+            {
+                // Skip entries with timestamps that cannot be converted to DateTimeOffset
+                continue;
+            }
         }
 
         return accounts;
     }
 
-    public static SteamAccount? SelectActive(IReadOnlyList<SteamAccount> accounts) =>
-        accounts.FirstOrDefault(a => a.MostRecent)
-        ?? accounts.MaxBy(a => a.Timestamp);
+    public static SteamAccount? SelectActive(IReadOnlyList<SteamAccount> accounts)
+    {
+        var flagged = accounts.Where(a => a.MostRecent).ToList();
+        return flagged.Count > 0
+            ? flagged.MaxBy(a => a.Timestamp)
+            : accounts.MaxBy(a => a.Timestamp);
+    }
 }

@@ -71,4 +71,57 @@ public class LoginUsersReaderTests
 
         Assert.Empty(accounts);
     }
+
+    [Fact]
+    public void HandlesOutOfRangeTimestampGracefully()
+    {
+        var accounts = LoginUsersReader.Read("""
+            "users"
+            {
+                "76561190000000001"
+                {
+                    "AccountName"		"bad_timestamp"
+                    "PersonaName"		"Bad"
+                    "MostRecent"		"0"
+                    "Timestamp"		"99999999999999999999"
+                }
+                "76561190000000002"
+                {
+                    "AccountName"		"good"
+                    "PersonaName"		"Good"
+                    "MostRecent"		"0"
+                    "Timestamp"		"1000"
+                }
+            }
+            """);
+
+        Assert.Equal(1, accounts.Count);
+        Assert.Equal(76561190000000002u, accounts[0].SteamId64);
+    }
+
+    [Fact]
+    public void BreaksTieByTimestampWhenMultipleAccountsFlaggedMostRecent()
+    {
+        var accounts = LoginUsersReader.Read("""
+            "users"
+            {
+                "76561190000000001"
+                {
+                    "AccountName"		"older"
+                    "PersonaName"		"Older"
+                    "MostRecent"		"1"
+                    "Timestamp"		"1000"
+                }
+                "76561190000000002"
+                {
+                    "AccountName"		"newer"
+                    "PersonaName"		"Newer"
+                    "MostRecent"		"1"
+                    "Timestamp"		"2000"
+                }
+            }
+            """);
+
+        Assert.Equal(76561190000000002u, LoginUsersReader.SelectActive(accounts)!.SteamId64);
+    }
 }
