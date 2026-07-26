@@ -200,8 +200,39 @@ Mandatory implementation details:
 - `percent` can be exactly 0; without clamping the logarithm goes to infinity.
 - Global percentages may be missing entirely (fresh releases) — fall back to
   equal weights and label rarity as unknown.
-- `relative < 0.02` marks an achievement as a blocker and flags the game as
-  "100% questionable". Flagged, not excluded — that call belongs to the user.
+- A missing percentage and a percentage of zero mean different things and must
+  never be conflated. Unknown rarity gets a neutral cost; a verified zero is
+  genuinely maximally rare.
+
+### 8.1 No blocker detection (decided 2026-07-26)
+
+An earlier version of this design flagged achievements below a rarity
+threshold as "blockers" and labelled such games "100% questionable". That
+concept is removed deliberately, and should not be reintroduced without
+solving the underlying problem first.
+
+A low global percentage does not mean an achievement is hard or unobtainable.
+It conflates at least three unrelated causes:
+
+- **When the achievement was added.** Achievements are frequently added years
+  after release, especially for older games. By then most owners have stopped
+  playing, so the percentage stays permanently low regardless of difficulty.
+- **Whether it happens organically.** Many achievements are rare simply
+  because nobody stumbles into them while playing normally, yet take twenty
+  minutes once you deliberately go for them.
+- **Genuine unobtainability.** Dead multiplayer modes and broken triggers —
+  the case the flag was meant to catch — are only a fraction of the low
+  percentages.
+
+Since a single number cannot separate these, the flag was a noisy heuristic
+presented to the user as a fact. Erring in that direction is worse than
+silence: it tells someone to abandon a game they would have finished.
+
+Rarity is still used for **cost**, which answers "roughly how much effort",
+not "this is impossible". That interpretation survives the objection.
+
+The right way to surface genuine unobtainability is curated per-achievement
+information, not inference from statistics — see 10.2.
 
 ## 9. Screens
 
@@ -209,7 +240,11 @@ Mandatory implementation details:
 (`library_600x900.jpg`), title, progress (`37 of 44`), remaining effort, and —
 crucially — a "why it is here" line such as *"3 left: two common, one rare
 (2.1%)"*. Without that explanation any recommendation list reads as guesswork.
-Filters: hide games with blockers, minimum playtime, title search.
+Filters: minimum playtime, title search.
+
+Rarity is shown as a number, not as a verdict. The user sees "one rare (2.1%)"
+and draws their own conclusion; the app does not tell them whether that is
+achievable (see 8.1).
 
 **Game screen.** `header.jpg` banner, progress, playtime. The "remaining"
 section is sorted by cost, cheapest first; the "unlocked" section by unlock
@@ -237,7 +272,22 @@ collected as raw material for a future heuristic.
 Accepted consequence: a game like Stellaris will show a low completion
 percentage even when everything obtainable without buying DLC is unlocked.
 
-### 10.2 Other non-goals
+### 10.2 Curated achievement information (far future)
+
+The honest answer to "is this achievement still obtainable, and how do I get
+it?" is human-written information, not a statistic. Possible shapes, in
+increasing cost: Markdown files in this repository describing specific games
+or achievements; a shared server serving the same content; community
+contributions.
+
+This would also be the right home for genuine unobtainability data — a curated
+"this achievement is broken / requires dead servers" note carries authority
+that a rarity threshold never can (see 8.1).
+
+Explicitly far future. Recorded here so the reasoning is not lost, not as a
+commitment.
+
+### 10.3 Other non-goals
 
 - Full library grid and statistics dashboard — they grow from the same data as
   extra queries, and come after the primary scenario works.

@@ -42,9 +42,18 @@ tutorial achievement can sit at 40% and mean nothing. Comparing raw
 percentages between titles is misleading; comparing them against the game's
 own baseline is not.
 
-Achievements below 2% relative rarity are flagged as **blockers** — usually
-dead multiplayer modes or broken triggers. The game stays in your list, but
-it is honest with you that 100% may no longer be reachable.
+### What it deliberately does not do
+
+It does not tell you an achievement is "impossible". A low global percentage
+looks like difficulty but usually is not: achievements are often added years
+after release, when most owners have already stopped playing, and many are rare
+only because nobody stumbles into them while playing normally — twenty minutes
+if you actually go for them.
+
+One number cannot separate "brutally hard" from "added late" from "nobody
+tries". So rarity is shown to you as a number, and the judgement stays yours.
+Guessing here and guessing wrong would mean telling you to abandon a game you
+would have finished in an evening.
 
 ## What it does
 
@@ -52,7 +61,6 @@ it is honest with you that 100% may no longer be reachable.
 - Ranks games by remaining effort, with a plain-language reason for each
   position — *"3 left: two common, one rare (2.1%)"*
 - Per-game view: what is left, sorted easiest first, with rarity for each
-- Flags achievements that are effectively unobtainable
 - Works offline once synced — everything is cached locally in SQLite
 
 ## Requirements
@@ -108,6 +116,9 @@ Deliberately out of scope for the first release, in rough order of likelihood:
 - Separating base game achievements from DLC — [harder than it sounds](docs/steam-api.md#dlc),
   Steam exposes no DLC flag anywhere in its API
 - Friend comparison
+- Curated per-achievement notes and guides, which is the only honest way to
+  answer "is this still obtainable?" — far future, see the
+  [design doc](docs/specs/2026-07-26-steam-achievements-tracker-design.md)
 
 ## Documentation
 

@@ -64,30 +64,6 @@ public class EffortCalculatorTests
     }
 
     [Fact]
-    public void FlagsBlockersBelowTwoPercentRelativeRarity()
-    {
-        var effort = EffortCalculator.Evaluate(
-        [
-            Achievement("Common", unlocked: true, percent: 50),
-            Achievement("Dead", unlocked: false, percent: 0.4),   // 0.8% relative
-        ]);
-
-        Assert.True(effort.HasBlockers);
-    }
-
-    [Fact]
-    public void DoesNotFlagBlockersThatAreAlreadyUnlocked()
-    {
-        var effort = EffortCalculator.Evaluate(
-        [
-            Achievement("Common", unlocked: true, percent: 50),
-            Achievement("Rare", unlocked: true, percent: 0.4),
-        ]);
-
-        Assert.False(effort.HasBlockers);
-    }
-
-    [Fact]
     public void FallsBackToEqualWeightsWhenRarityIsUnknown()
     {
         var effort = EffortCalculator.Evaluate(
@@ -99,7 +75,6 @@ public class EffortCalculatorTests
 
         Assert.True(effort.RarityUnknown);
         Assert.Equal(2, effort.RemainingEffort, 6);   // one unit per locked achievement
-        Assert.False(effort.HasBlockers);
     }
 
     [Fact]
@@ -140,24 +115,6 @@ public class EffortCalculatorTests
     }
 
     [Fact]
-    public void DoesNotFlagBlockersOnAchievementsWithUnknownRarity()
-    {
-        // Regression test: a null GlobalPercent must never be conflated with a
-        // verified zero. Previously "?? 0" made this locked-but-undated
-        // achievement look like a confirmed near-impossible one and falsely
-        // flagged the whole game as having a blocker.
-        var effort = EffortCalculator.Evaluate(
-        [
-            Achievement("Common", unlocked: true, percent: 80),
-            Achievement("Unknown", unlocked: false, percent: null),
-            Achievement("Known", unlocked: false, percent: 40),
-        ]);
-
-        Assert.False(effort.HasBlockers);
-        Assert.False(effort.RarityUnknown);
-    }
-
-    [Fact]
     public void UnknownRarityAchievementsGetNeutralWeightNotMaximalRarity()
     {
         var effort = EffortCalculator.Evaluate(
@@ -194,22 +151,5 @@ public class EffortCalculatorTests
         // (which would push it up towards the ~9.97 rarity-floor cost).
         Assert.Equal(fullyUnknown.RemainingEffort, mixed.RemainingEffort, 6);
         Assert.True(mixed.RemainingEffort < 5);
-        Assert.False(mixed.HasBlockers);
-    }
-
-    [Fact]
-    public void FlagsBlockerByAbsoluteRarityEvenWhenItIsTheGamesOwnBaseline()
-    {
-        // A single locked achievement is always its own normalization baseline,
-        // so its relative rarity is always exactly 1.0 and its relative cost is
-        // always 0 — the relative rule alone can never see this achievement as
-        // rare. The absolute threshold exists precisely to catch this case.
-        var effort = EffortCalculator.Evaluate(
-        [
-            Achievement("OnlyOne", unlocked: false, percent: 0.01),
-        ]);
-
-        Assert.Equal(0, effort.RemainingEffort, 6);
-        Assert.True(effort.HasBlockers);
     }
 }
