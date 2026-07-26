@@ -4998,7 +4998,29 @@ Run: `dotnet run --project SteamAchievements.Preview` and open `http://localhost
 
 Expected: clicking the blue swatch immediately turns the selected navigation dot, the effort figures on the queue and the progress bars blue. Navigating to the queue and back keeps it blue. Reloading the page resets it to amber, because the preview stores preferences in memory by design — the SQLite implementation is already tested in Task 5.
 
-If the colour changes on Settings but not on the queue, the shell is not re-rendering: `AppShell` reads `Preferences.Accent` during render, so a `StateHasChanged` on the layout is needed. Fix it by having `SettingsPage` call `StateHasChanged` on itself and confirming the layout re-renders on navigation; if it still lags, raise an event from `QueueState` — do not duplicate the accent into a second field.
+A Blazor layout does not re-render because a page inside it changed state, so
+`AppShell` — which reads `Preferences.Accent` during render — will not pick the
+new colour up on its own. `SettingsPage` calling `StateHasChanged` on itself
+does not help; it re-renders only itself.
+
+The seam therefore has to announce the change. Add to `IUserPreferences`:
+
+```csharp
+    /// <summary>
+    /// Raised after the accent changes. The shell renders the accent as a CSS
+    /// variable on its root, and a Blazor layout does not re-render when a page
+    /// inside it changes state — so without this the new colour would not
+    /// appear until the next navigation.
+    /// </summary>
+    event Action? Changed;
+```
+
+Raise it at the end of `SetAccent` in both implementations —
+`SqliteUserPreferences` in Core and `InMemoryUserPreferences` in the preview
+host. Then have `AppShell` implement `IDisposable`, subscribe in
+`OnInitialized` with a handler that calls `StateHasChanged`, and unsubscribe in
+`Dispose`. Do not duplicate the accent into a second field held by the shell;
+one source of truth, announced.
 
 - [ ] **Step 5: Commit**
 
