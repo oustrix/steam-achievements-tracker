@@ -4691,10 +4691,16 @@ Create `SteamAchievements.Preview/Components/ScenarioScope.razor` — preview-on
     {
         var query = QueryHelpers.ParseQuery(new Uri(Navigation.Uri).Query);
 
-        Library.Scenario = query.TryGetValue("scenario", out var value)
-            && Enum.TryParse<Scenario>(value.ToString().Replace("-", ""), ignoreCase: true, out var scenario)
-                ? scenario
-                : Scenario.Normal;
+        // Only reassign when the URL actually names a scenario. Blazor's
+        // internal navigation does not carry the query string, so resetting on
+        // its absence would drop you back to Normal the moment you clicked
+        // anything — which defeats the point of walking the app in one state.
+        // `?scenario=normal` is how you get back.
+        if (query.TryGetValue("scenario", out var value)
+            && Enum.TryParse<Scenario>(value.ToString().Replace("-", ""), ignoreCase: true, out var scenario))
+        {
+            Library.Scenario = scenario;
+        }
     }
 }
 ```
@@ -4732,7 +4738,7 @@ Run: `dotnet run --project SteamAchievements.Preview` and walk through these URL
 | `/sync?scenario=other-account` | The same card plus the amber "Paused after five consecutive failures" notice with a "Retry now" button |
 | `/sync?scenario=invalid-key` | "No sync running" with disabled buttons, the red "Steam rejected the API key" notice whose button opens Settings, the amber privacy notice, and "No syncs recorded yet." |
 | `/?scenario=empty` | "Nothing left to rank" |
-| `/?scenario=rarity-unknown` | One row, Divinity, reading "39 left, rarity unknown for six of them" |
+| `/?scenario=rarity-unknown` | One row, Divinity, reading "39 left, rarity unknown for all of them" — the scenario strips every percentage, so the whole game is unranked, which is the state the name promises |
 
 - [ ] **Step 6: Commit**
 
