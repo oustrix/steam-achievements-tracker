@@ -138,4 +138,78 @@ public class EffortCalculatorTests
         Assert.Equal(0, effort.RemainingEffort);
         Assert.Equal(100, effort.CompletionPercent, 6);
     }
+
+    [Fact]
+    public void DoesNotFlagBlockersOnAchievementsWithUnknownRarity()
+    {
+        // Regression test: a null GlobalPercent must never be conflated with a
+        // verified zero. Previously "?? 0" made this locked-but-undated
+        // achievement look like a confirmed near-impossible one and falsely
+        // flagged the whole game as having a blocker.
+        var effort = EffortCalculator.Evaluate(
+        [
+            Achievement("Common", unlocked: true, percent: 80),
+            Achievement("Unknown", unlocked: false, percent: null),
+            Achievement("Known", unlocked: false, percent: 40),
+        ]);
+
+        Assert.False(effort.HasBlockers);
+        Assert.False(effort.RarityUnknown);
+    }
+
+    [Fact]
+    public void UnknownRarityAchievementsGetNeutralWeightNotMaximalRarity()
+    {
+        var effort = EffortCalculator.Evaluate(
+        [
+            Achievement("Common", unlocked: true, percent: 80),
+            Achievement("Unknown", unlocked: false, percent: null),
+        ]);
+
+        // If null were still conflated with zero this would cost roughly
+        // -log2(0.001) ≈ 9.97 (the rarity floor) instead of a neutral 1 unit.
+        Assert.Equal(1, effort.RemainingEffort, 6);
+    }
+
+    [Fact]
+    public void MixedKnownAndUnknownEffortSitsBetweenFullyKnownAndFullyUnknownCases()
+    {
+        var fullyUnknown = EffortCalculator.Evaluate(
+        [
+            Achievement("Common", unlocked: true, percent: null),
+            Achievement("Locked", unlocked: false, percent: null),
+        ]);
+
+        var mixed = EffortCalculator.Evaluate(
+        [
+            Achievement("Common", unlocked: true, percent: 80),
+            Achievement("Locked", unlocked: false, percent: null),
+        ]);
+
+        // Fully unknown falls back to exactly one unit per locked achievement.
+        Assert.Equal(1, fullyUnknown.RemainingEffort, 6);
+
+        // A single unknown achievement in an otherwise-known game gets the same
+        // neutral unit, not something inflated by treating it as a verified zero
+        // (which would push it up towards the ~9.97 rarity-floor cost).
+        Assert.Equal(fullyUnknown.RemainingEffort, mixed.RemainingEffort, 6);
+        Assert.True(mixed.RemainingEffort < 5);
+        Assert.False(mixed.HasBlockers);
+    }
+
+    [Fact]
+    public void FlagsBlockerByAbsoluteRarityEvenWhenItIsTheGamesOwnBaseline()
+    {
+        // A single locked achievement is always its own normalization baseline,
+        // so its relative rarity is always exactly 1.0 and its relative cost is
+        // always 0 — the relative rule alone can never see this achievement as
+        // rare. The absolute threshold exists precisely to catch this case.
+        var effort = EffortCalculator.Evaluate(
+        [
+            Achievement("OnlyOne", unlocked: false, percent: 0.01),
+        ]);
+
+        Assert.Equal(0, effort.RemainingEffort, 6);
+        Assert.True(effort.HasBlockers);
+    }
 }
