@@ -5,17 +5,17 @@ namespace SteamAchievements.Core.Tests.Steam;
 
 public class SteamApiEndpointTests
 {
-    private static async Task<SteamApiClient> ClientFor(string fixture, FakeHttpMessageHandler? capture = null)
+    private static async Task<(SteamApiClient Client, FakeHttpMessageHandler Handler)> ClientFor(
+        string fixture, string apiKey = TestSteamApiClientFactory.ApiKey)
     {
         var body = await File.ReadAllTextAsync(TestPaths.Data(fixture));
-        var handler = capture ?? FakeHttpMessageHandler.Returning(HttpStatusCode.OK, body);
-        return new SteamApiClient(new HttpClient(handler) { BaseAddress = new Uri("https://api.steampowered.com/") }, "TESTKEY");
+        return TestSteamApiClientFactory.Create(FakeHttpMessageHandler.Returning(HttpStatusCode.OK, body), apiKey);
     }
 
     [Fact]
     public async Task ParsesOwnedGames()
     {
-        var client = await ClientFor("owned_games.json");
+        var (client, _) = await ClientFor("owned_games.json");
 
         var games = await client.GetOwnedGamesAsync(76561190000000002, CancellationToken.None);
 
@@ -29,9 +29,7 @@ public class SteamApiEndpointTests
     [Fact]
     public async Task RequestsOwnedGamesWithAppInfoIncluded()
     {
-        var body = await File.ReadAllTextAsync(TestPaths.Data("owned_games.json"));
-        var handler = FakeHttpMessageHandler.Returning(HttpStatusCode.OK, body);
-        var client = new SteamApiClient(new HttpClient(handler) { BaseAddress = new Uri("https://api.steampowered.com/") }, "TESTKEY");
+        var (client, handler) = await ClientFor("owned_games.json");
 
         await client.GetOwnedGamesAsync(76561190000000002, CancellationToken.None);
 
@@ -43,7 +41,7 @@ public class SteamApiEndpointTests
     [Fact]
     public async Task ReturnsEmptyListForPrivateProfile()
     {
-        var client = await ClientFor("private_profile.json");
+        var (client, _) = await ClientFor("private_profile.json");
 
         var games = await client.GetOwnedGamesAsync(76561190000000002, CancellationToken.None);
 
@@ -53,7 +51,7 @@ public class SteamApiEndpointTests
     [Fact]
     public async Task ParsesAchievementSchemaPreservingOrder()
     {
-        var client = await ClientFor("schema_for_game.json");
+        var (client, _) = await ClientFor("schema_for_game.json");
 
         var schema = await client.GetSchemaForGameAsync(292030, CancellationToken.None);
 
@@ -67,7 +65,7 @@ public class SteamApiEndpointTests
     [Fact]
     public async Task ParsesPlayerAchievements()
     {
-        var client = await ClientFor("player_achievements.json");
+        var (client, _) = await ClientFor("player_achievements.json");
 
         var progress = await client.GetPlayerAchievementsAsync(76561190000000002, 292030, CancellationToken.None);
 
@@ -80,9 +78,7 @@ public class SteamApiEndpointTests
     [Fact]
     public async Task RequestsGlobalPercentagesUsingGameIdParameter()
     {
-        var body = await File.ReadAllTextAsync(TestPaths.Data("global_percentages.json"));
-        var handler = FakeHttpMessageHandler.Returning(HttpStatusCode.OK, body);
-        var client = new SteamApiClient(new HttpClient(handler) { BaseAddress = new Uri("https://api.steampowered.com/") }, "TESTKEY");
+        var (client, handler) = await ClientFor("global_percentages.json");
 
         var percentages = await client.GetGlobalPercentagesAsync(292030, CancellationToken.None);
 
@@ -96,11 +92,7 @@ public class SteamApiEndpointTests
     [Fact]
     public async Task EscapesApiKeyContainingAmpersandSoOtherParametersSurviveIntact()
     {
-        var body = await File.ReadAllTextAsync(TestPaths.Data("owned_games.json"));
-        var handler = FakeHttpMessageHandler.Returning(HttpStatusCode.OK, body);
-        var client = new SteamApiClient(
-            new HttpClient(handler) { BaseAddress = new Uri("https://api.steampowered.com/") },
-            "AB&steamid=999&evil=1");
+        var (client, handler) = await ClientFor("owned_games.json", "AB&steamid=999&evil=1");
 
         await client.GetOwnedGamesAsync(76561190000000002, CancellationToken.None);
 
@@ -116,11 +108,7 @@ public class SteamApiEndpointTests
     [Fact]
     public async Task EscapesApiKeyContainingFragmentSoTrailingParametersAreNotDropped()
     {
-        var body = await File.ReadAllTextAsync(TestPaths.Data("owned_games.json"));
-        var handler = FakeHttpMessageHandler.Returning(HttpStatusCode.OK, body);
-        var client = new SteamApiClient(
-            new HttpClient(handler) { BaseAddress = new Uri("https://api.steampowered.com/") },
-            "AB#fragment&steamid=999");
+        var (client, handler) = await ClientFor("owned_games.json", "AB#fragment&steamid=999");
 
         await client.GetOwnedGamesAsync(76561190000000002, CancellationToken.None);
 
@@ -135,11 +123,7 @@ public class SteamApiEndpointTests
     [Fact]
     public async Task TrimsWhitespacePastedIntoTheApiKey()
     {
-        var body = await File.ReadAllTextAsync(TestPaths.Data("owned_games.json"));
-        var handler = FakeHttpMessageHandler.Returning(HttpStatusCode.OK, body);
-        var client = new SteamApiClient(
-            new HttpClient(handler) { BaseAddress = new Uri("https://api.steampowered.com/") },
-            "  TESTKEY\n");
+        var (client, handler) = await ClientFor("owned_games.json", "  TESTKEY\n");
 
         await client.GetOwnedGamesAsync(76561190000000002, CancellationToken.None);
 
@@ -150,7 +134,7 @@ public class SteamApiEndpointTests
     [Fact]
     public async Task DeduplicatesGlobalPercentagesByKeepingFirstOccurrenceInsteadOfThrowing()
     {
-        var handler = FakeHttpMessageHandler.Returning(HttpStatusCode.OK,
+        var (client, _) = TestSteamApiClientFactory.Create(FakeHttpMessageHandler.Returning(HttpStatusCode.OK,
             """
             {
               "achievementpercentages": {
@@ -160,8 +144,7 @@ public class SteamApiEndpointTests
                 ]
               }
             }
-            """);
-        var client = new SteamApiClient(new HttpClient(handler) { BaseAddress = new Uri("https://api.steampowered.com/") }, "TESTKEY");
+            """));
 
         var percentages = await client.GetGlobalPercentagesAsync(292030, CancellationToken.None);
 

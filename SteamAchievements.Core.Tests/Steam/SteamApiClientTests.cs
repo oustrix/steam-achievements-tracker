@@ -6,7 +6,7 @@ namespace SteamAchievements.Core.Tests.Steam;
 public class SteamApiClientTests
 {
     private static SteamApiClient Client(FakeHttpMessageHandler handler) =>
-        new(new HttpClient(handler) { BaseAddress = new Uri("https://api.steampowered.com/") }, "TESTKEY");
+        TestSteamApiClientFactory.Create(handler).Client;
 
     [Fact]
     public async Task ClassifiesHtmlUnauthorizedBodyAsInvalidKey()

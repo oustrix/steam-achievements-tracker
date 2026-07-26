@@ -14,7 +14,13 @@ public static class LoginUsersReader
                 continue;
             }
 
-            DateTimeOffset timestamp;
+            // Unparseable or out-of-range timestamps clamp to MinValue rather
+            // than being skipped: the account itself is still real and
+            // usable (SelectActive can still find it via the MostRecent
+            // flag), and MinValue sorts before every genuine timestamp, so a
+            // corrupted entry simply loses timestamp-based tie-breaking
+            // instead of vanishing from the account list entirely.
+            var timestamp = DateTimeOffset.MinValue;
             if (long.TryParse(node["Timestamp"].Value, out var timestampSeconds))
             {
                 try
@@ -23,14 +29,8 @@ public static class LoginUsersReader
                 }
                 catch (ArgumentOutOfRangeException)
                 {
-                    // Clamp out-of-range timestamps to MinValue (sentinel for "unknown")
-                    timestamp = DateTimeOffset.MinValue;
+                    // Leave timestamp at the MinValue default set above.
                 }
-            }
-            else
-            {
-                // Clamp unparseable timestamps to MinValue (sentinel for "unknown")
-                timestamp = DateTimeOffset.MinValue;
             }
 
             accounts.Add(new SteamAccount(

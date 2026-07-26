@@ -1,3 +1,4 @@
+using System.Data;
 using Dapper;
 using Microsoft.Data.Sqlite;
 using SteamAchievements.Core.Steam;
@@ -28,6 +29,28 @@ public sealed class GameRepository
 
     /// <summary>Exposed so tests can assert with raw SQL.</summary>
     public SqliteConnection Connection => _connection;
+
+    // Every timestamp column is stored as ISO-8601 round-trip ("o") text so
+    // it sorts lexicographically and survives a DateTimeOffset round-trip
+    // exactly. These two helpers are the only place that format is spelled
+    // out — every read and write site below goes through one of them instead
+    // of calling ToString("o")/Parse directly.
+    private static string? EncodeTimestamp(DateTimeOffset? value) => value?.ToString("o");
+
+    private static DateTimeOffset? DecodeTimestamp(string? value) => value is null ? null : DateTimeOffset.Parse(value);
+
+    // achievements' schema_synced_at/global_synced_at bookkeeping columns
+    // live on sync_state, but schema or global percentages can legitimately
+    // be synced for a game before UpsertOwnedGames has ever created its
+    // sync_state row in this connection's lifetime. Without a placeholder
+    // row first, the bookkeeping UPDATE that follows is a silent no-op
+    // against a WHERE clause matching zero rows, leaving that *_synced_at
+    // column NULL forever and making the 30-day TTL check treat the data as
+    // perpetually stale.
+    private void EnsureSyncStateRow(uint appId, IDbTransaction transaction) =>
+        _connection.Execute(
+            "INSERT INTO sync_state (app_id) VALUES (@AppId) ON CONFLICT(app_id) DO NOTHING",
+            new { AppId = appId }, transaction);
 
     public void UpsertOwnedGames(IReadOnlyList<OwnedGame> games)
     {
@@ -63,7 +86,7 @@ public sealed class GameRepository
                     game.IconHash,
                     game.PlaytimeForever,
                     game.PlaytimeTwoWeeks,
-                    LastPlayed = game.LastPlayed?.ToString("o"),
+                    LastPlayed = EncodeTimestamp(game.LastPlayed),
                 }), transaction);
 
             transaction.Commit();
@@ -98,7 +121,7 @@ public sealed class GameRepository
                 FROM owned_games o JOIN games g ON g.app_id = o.app_id
                 """)
                 .Select(r => new OwnedGame((uint)r.AppId, r.Name, r.IconHash, (int)r.PlaytimeForever, (int)r.PlaytimeTwoWeeks,
-                    r.LastPlayedAt is null ? null : DateTimeOffset.Parse(r.LastPlayedAt)))
+                    DecodeTimestamp(r.LastPlayedAt)))
                 .ToList();
         }
     }
@@ -113,20 +136,12 @@ public sealed class GameRepository
             // legitimately be synced for a game the caller hasn't (yet) upserted via
             // UpsertOwnedGames in this connection's lifetime, so ensure a placeholder
             // row exists; UpsertOwnedGames' real name/icon_hash values win on conflict.
-            //
-            // sync_state must get the same placeholder treatment: the bookkeeping
-            // UPDATE below (schema_synced_at) is a silent no-op against a WHERE
-            // clause matching zero rows, which would leave schema_synced_at NULL
-            // forever and make Task 7's 30-day TTL check treat the schema as
-            // perpetually stale.
             _connection.Execute(
                 "INSERT INTO games (app_id, name) VALUES (@AppId, '') ON CONFLICT(app_id) DO NOTHING",
                 new { AppId = appId }, transaction);
-            _connection.Execute(
-                "INSERT INTO sync_state (app_id) VALUES (@AppId) ON CONFLICT(app_id) DO NOTHING",
-                new { AppId = appId }, transaction);
+            EnsureSyncStateRow(appId, transaction);
 
-            var nowIso = now.ToString("o");
+            var nowIso = EncodeTimestamp(now);
 
             // first_seen_at is written once and never overwritten: it is the
             // only signal we will have for future DLC grouping. Passing the
@@ -187,7 +202,7 @@ public sealed class GameRepository
                 FROM achievements WHERE app_id = @AppId ORDER BY sort_order
                 """, new { AppId = appId })
                 .Select(r => new StoredAchievement(r.ApiName, r.DisplayName, r.Description, r.IconUrl,
-                    r.IconGrayUrl, r.IsHidden == 1, (int)r.SortOrder, DateTimeOffset.Parse(r.FirstSeenAt)))
+                    r.IconGrayUrl, r.IsHidden == 1, (int)r.SortOrder, DecodeTimestamp(r.FirstSeenAt)!.Value))
                 .ToList();
         }
     }
@@ -197,15 +212,9 @@ public sealed class GameRepository
         lock (_lock)
         {
             using var transaction = _connection.BeginTransaction();
-            var now = DateTimeOffset.UtcNow.ToString("o");
+            var now = EncodeTimestamp(DateTimeOffset.UtcNow);
 
-            // Same gap as UpsertSchema: global percentages can be synced for a game
-            // whose sync_state row doesn't exist yet, which would make the
-            // bookkeeping UPDATE below a silent no-op and leave global_synced_at
-            // NULL forever.
-            _connection.Execute(
-                "INSERT INTO sync_state (app_id) VALUES (@AppId) ON CONFLICT(app_id) DO NOTHING",
-                new { AppId = appId }, transaction);
+            EnsureSyncStateRow(appId, transaction);
 
             // Passing the whole dictionary as the parameter lets Dapper
             // prepare this command once and reuse it across every
@@ -245,7 +254,7 @@ public sealed class GameRepository
                     AppId = appId,
                     item.ApiName,
                     Unlocked = item.Unlocked ? 1 : 0,
-                    UnlockedAt = item.UnlockedAt?.ToString("o"),
+                    UnlockedAt = EncodeTimestamp(item.UnlockedAt),
                 }), transaction);
 
             transaction.Commit();
@@ -272,9 +281,9 @@ public sealed class GameRepository
                     (uint)r.AppId,
                     r.HasAchievements == 1,
                     (int)r.SyncedPlaytime,
-                    r.SchemaSyncedAt is null ? null : DateTimeOffset.Parse(r.SchemaSyncedAt),
-                    r.GlobalSyncedAt is null ? null : DateTimeOffset.Parse(r.GlobalSyncedAt),
-                    r.PlayerSyncedAt is null ? null : DateTimeOffset.Parse(r.PlayerSyncedAt)));
+                    DecodeTimestamp(r.SchemaSyncedAt),
+                    DecodeTimestamp(r.GlobalSyncedAt),
+                    DecodeTimestamp(r.PlayerSyncedAt)));
         }
     }
 
@@ -286,7 +295,7 @@ public sealed class GameRepository
                 UPDATE sync_state
                 SET synced_playtime = @Playtime, player_synced_at = @Now, last_error = NULL
                 WHERE app_id = @AppId
-                """, new { AppId = appId, Playtime = playtime, Now = now.ToString("o") });
+                """, new { AppId = appId, Playtime = playtime, Now = EncodeTimestamp(now) });
         }
     }
 
@@ -331,8 +340,7 @@ public sealed class GameRepository
                 ORDER BY a.sort_order
                 """, new { AppId = appId })
                 .Select(r => new AchievementProgress(r.ApiName, r.DisplayName, r.Description, r.IconUrl,
-                    r.IsHidden == 1, r.Unlocked == 1,
-                    r.UnlockedAt is null ? null : DateTimeOffset.Parse(r.UnlockedAt), r.Percent))
+                    r.IsHidden == 1, r.Unlocked == 1, DecodeTimestamp(r.UnlockedAt), r.Percent))
                 .ToList();
         }
     }
@@ -355,7 +363,7 @@ public sealed class GameRepository
                 LEFT JOIN player_achievements p ON p.app_id = a.app_id AND p.api_name = a.api_name
                 LEFT JOIN global_percents     gp ON gp.app_id = a.app_id AND gp.api_name = a.api_name
                 ON CONFLICT(taken_at) DO NOTHING;
-                """, new { TakenAt = takenAt.ToString("o") });
+                """, new { TakenAt = EncodeTimestamp(takenAt) });
         }
     }
 }
