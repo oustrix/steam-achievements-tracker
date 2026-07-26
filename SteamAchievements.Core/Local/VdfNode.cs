@@ -8,7 +8,7 @@ public sealed class VdfNode
 
     public string? Value { get; init; }
 
-    public IReadOnlyDictionary<string, VdfNode> Children => _children;
+    public IReadOnlyDictionary<string, VdfNode> Children => new System.Collections.ObjectModel.ReadOnlyDictionary<string, VdfNode>(_children);
 
     public VdfNode this[string key] =>
         _children.TryGetValue(key, out var child) ? child : Empty;

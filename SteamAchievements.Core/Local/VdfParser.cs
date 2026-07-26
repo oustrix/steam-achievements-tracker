@@ -16,6 +16,11 @@ public static class VdfParser
             var key = ReadToken(text, ref position);
             if (key is null)
             {
+                SkipTrivia(text, ref position);
+                if (position < text.Length)
+                {
+                    throw new FormatException("Unexpected content after complete VDF structure.");
+                }
                 return root;
             }
 
@@ -90,6 +95,11 @@ public static class VdfParser
             }
 
             position++;
+        }
+
+        if (position >= text.Length)
+        {
+            throw new FormatException("Unterminated quoted string.");
         }
 
         position++;

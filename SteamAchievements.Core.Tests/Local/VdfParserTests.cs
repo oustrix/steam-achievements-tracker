@@ -61,4 +61,38 @@ public class VdfParserTests
     {
         Assert.Throws<FormatException>(() => VdfParser.Parse("\"root\"\n{\n"));
     }
+
+    [Fact]
+    public void EmptySingletonIsNotCastableToMutableDictionary()
+    {
+        var a = VdfParser.Parse("\"root\"\n{\n}\n");
+        var absent = a["root"]["absent"];
+
+        Assert.Throws<InvalidCastException>(() =>
+            (Dictionary<string, VdfNode>)absent.Children
+        );
+    }
+
+    [Fact]
+    public void DoesNotPoisonEmptySingletonAcrossParses()
+    {
+        var a = VdfParser.Parse("\"root\"\n{\n}\n");
+        _ = a["root"]["absent"];
+
+        var b = VdfParser.Parse("\"other\"\n{\n}\n");
+
+        Assert.Null(b["other"]["absent"]["poisoned"].Value);
+    }
+
+    [Fact]
+    public void ThrowsOnUnterminatedQuotedString()
+    {
+        Assert.Throws<FormatException>(() => VdfParser.Parse("\"key\"\t\"unterminated"));
+    }
+
+    [Fact]
+    public void ThrowsOnTrailingGarbageAfterTopLevelSection()
+    {
+        Assert.Throws<FormatException>(() => VdfParser.Parse("\"root\"\n{\n}\n/"));
+    }
 }
