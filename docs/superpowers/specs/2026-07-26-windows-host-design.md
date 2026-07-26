@@ -461,8 +461,16 @@ second.
 Interfaces in `Core/Presentation`, implementations there too except the last:
 
 - `IOnboarding` — the current step, discovered accounts, choosing an account,
-  submitting a key (format check → trial request to Steam → store), and manual
-  SteamID64 entry for when Steam is absent or the user is not signed into it.
+  submitting a key, and manual SteamID64 entry for when Steam is absent or the
+  user is not signed into it.
+
+  Submitting a key is format check → trial request to Steam → store, and
+  nothing is stored unless Steam accepts it. The result has four values, not
+  two: a malformed key spends no request at all, and a Steam that cannot be
+  reached is kept separate from a Steam that refused — the advice for the first
+  is "try again", for the second "get another key". One `GetOwnedGames` call
+  answers this in under a second; without it the user learns their key is bad
+  several minutes into their first sync.
 - `IAccountAdmin` — the stored account, the detected active Steam account, the
   confirmed switch, the full reset.
 - `IExternalLinks` — open Steam's key page, open the data folder. Implemented
@@ -558,6 +566,7 @@ table exists so no condition is left without a screen.
 | Profile returned no name or avatar | "Is this you?" step | Continue — the step is not blocked |
 | Key fails the format check | Key field | Nothing is sent to Steam |
 | Steam rejected the key during onboarding | Key field | Enter another |
+| Steam unreachable while checking the key | Key field | Retry — the key is not blamed and not stored |
 | Steam rejected the key mid-sync | Sync screen and the sidebar card | "Replace key" → settings; progress figures stay |
 | Sync failed on the network | Sync screen | Retry; the run is recorded in `sync_runs` with `error` |
 | Active Steam account differs from the stored one | Settings, as a line | Go to the confirmed switch |
