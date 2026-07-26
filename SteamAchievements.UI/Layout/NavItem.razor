@@ -1,0 +1,13 @@
+<NavLink class="nav-item" href="@Href" Match="@(Href == "/" ? NavLinkMatch.All : NavLinkMatch.Prefix)">
+    @if (WithDot)
+    {
+        <span class="dot"></span>
+    }
+    @Label
+</NavLink>
+
+@code {
+    [Parameter, EditorRequired] public string Href { get; set; } = "";
+    [Parameter, EditorRequired] public string Label { get; set; } = "";
+    [Parameter] public bool WithDot { get; set; } = true;
+}

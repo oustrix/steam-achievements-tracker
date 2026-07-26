@@ -1,0 +1,27 @@
+.nav-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 9px 11px;
+    border-radius: 7px;
+    font-size: 13px;
+    color: var(--text-muted);
+    cursor: pointer;
+}
+
+.nav-item:hover { color: var(--text); }
+
+.nav-item.active {
+    background: var(--bg-active);
+    color: var(--text);
+}
+
+.dot {
+    width: 5px;
+    height: 5px;
+    border-radius: 5px;
+    background: var(--dot-off);
+    flex: none;
+}
+
+.nav-item.active .dot { background: var(--accent); }

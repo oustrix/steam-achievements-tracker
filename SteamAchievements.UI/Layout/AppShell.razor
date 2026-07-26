@@ -1,5 +1,36 @@
 @inherits LayoutComponentBase
+@inject ILibraryQuery Library
+@inject IUserPreferences Preferences
+@inject IClock Clock
 
-<div class="shell">
-    @Body
+<div class="shell" style="--accent: @(Preferences.Accent ?? DefaultAccent)">
+    <nav class="sidebar">
+        <div class="brand">
+            <div class="name">Achievements</div>
+            <div class="version num">Tracker 0.1.0</div>
+        </div>
+
+        <div class="nav">
+            <NavItem Href="/" Label="Completion queue" />
+            <NavItem Href="sync" Label="Sync" />
+            <NavItem Href="settings" Label="Settings" />
+        </div>
+
+        <div class="spacer"></div>
+
+        <SyncStatusCard Summary="_summary" />
+    </nav>
+
+    <main class="content">
+        @Body
+    </main>
 </div>
+
+@code {
+    /// <summary>Amber, matching the mockup's default.</summary>
+    public const string DefaultAccent = "#e0a355";
+
+    private LibrarySummary _summary = new(0, 0, "", "");
+
+    protected override void OnInitialized() => _summary = Library.GetSummary(Clock.Now);
+}

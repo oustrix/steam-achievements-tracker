@@ -1,0 +1,23 @@
+<div class="notice @Severity.ToString().ToLowerInvariant()">
+    <span class="dot"></span>
+    <div class="text">
+        <span class="title">@Title</span>
+        @if (Body is not null)
+        {
+            <span class="body">@Body</span>
+        }
+    </div>
+    <span class="spacer"></span>
+    @if (ActionLabel is not null)
+    {
+        <button class="action" @onclick="OnAction">@ActionLabel</button>
+    }
+</div>
+
+@code {
+    [Parameter] public NoticeSeverity Severity { get; set; } = NoticeSeverity.Info;
+    [Parameter, EditorRequired] public string Title { get; set; } = "";
+    [Parameter] public RenderFragment? Body { get; set; }
+    [Parameter] public string? ActionLabel { get; set; }
+    [Parameter] public EventCallback OnAction { get; set; }
+}

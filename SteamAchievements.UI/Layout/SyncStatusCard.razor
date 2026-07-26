@@ -1,0 +1,8 @@
+<a class="card" href="sync">
+    <span class="when">@Summary.LastSyncText</span>
+    <span class="counts num">@Summary.CountsText</span>
+</a>
+
+@code {
+    [Parameter, EditorRequired] public LibrarySummary Summary { get; set; } = default!;
+}

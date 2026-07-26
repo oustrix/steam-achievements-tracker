@@ -1,0 +1,10 @@
+<div class="empty">
+    <div class="glyph"></div>
+    <span class="title">@Title</span>
+    <span class="body">@Body</span>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public string Title { get; set; } = "";
+    [Parameter, EditorRequired] public string Body { get; set; } = "";
+}

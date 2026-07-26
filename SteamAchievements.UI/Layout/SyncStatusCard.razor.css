@@ -1,0 +1,15 @@
+.card {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 11px 12px;
+    border: 1px solid var(--border-subtle);
+    border-radius: 8px;
+    background: var(--bg-raised);
+    color: var(--text-muted);
+    font-size: 12px;
+}
+
+.card:hover { border-color: var(--border-strong); }
+.when { color: var(--text); font-size: 12px; }
+.counts { font-size: 11px; color: var(--text-dim); }
