@@ -23,9 +23,15 @@
     {
         var query = QueryHelpers.ParseQuery(new Uri(Navigation.Uri).Query);
 
-        Library.Scenario = query.TryGetValue("scenario", out var value)
-            && Enum.TryParse<Scenario>(value.ToString().Replace("-", ""), ignoreCase: true, out var scenario)
-                ? scenario
-                : Scenario.Normal;
+        // Only reassign when the URL actually names a scenario. Blazor's
+        // internal navigation does not carry the query string, so resetting on
+        // its absence would drop you back to Normal the moment you clicked
+        // anything — which defeats the point of walking the app in one state.
+        // `?scenario=normal` is how you get back.
+        if (query.TryGetValue("scenario", out var value)
+            && Enum.TryParse<Scenario>(value.ToString().Replace("-", ""), ignoreCase: true, out var scenario))
+        {
+            Library.Scenario = scenario;
+        }
     }
 }
