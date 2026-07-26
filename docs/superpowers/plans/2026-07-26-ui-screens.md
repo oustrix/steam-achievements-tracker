@@ -2125,7 +2125,11 @@ Create `SteamAchievements.UI/wwwroot/app.css`:
     --bar-complete: #4c4650;
     --dot-off: #3d3844;
 
+    /* Two hatches, not one: small icons use the lighter pair, large covers and
+       the game banner the darker. Both come from the mockup. */
     --placeholder: repeating-linear-gradient(135deg, #2b2833 0 6px, #232028 6px 12px);
+    --placeholder-dark: repeating-linear-gradient(135deg, #232028 0 10px, #1d1b22 10px 20px);
+    --bg-hatch-dark: #1d1b22;
 }
 
 * { box-sizing: border-box; }
@@ -3324,7 +3328,7 @@ Create `SteamAchievements.UI/Shared/CoverImage.razor.css`:
 }
 
 .placeholder {
-    background: repeating-linear-gradient(135deg, #232028 0 6px, #1d1b22 6px 12px);
+    background: repeating-linear-gradient(135deg, var(--border-subtle) 0 6px, var(--bg-hatch-dark) 6px 12px);
     display: flex;
     align-items: flex-end;
     padding: 6px;
@@ -4030,10 +4034,10 @@ Create `SteamAchievements.UI/Game/GameHeader.razor.css`:
 .banner {
     position: relative;
     height: 230px;
-    /* The hatch shows through when header.jpg is missing, which is the same
-       placeholder the queue covers fall back to. */
-    background-color: #1d1b22;
-    background-image: repeating-linear-gradient(135deg, #232028 0 10px, #1d1b22 10px 20px);
+    /* The hatch shows through when header.jpg is missing. It is the darker of
+       the mockup's two hatches — small achievement icons use the lighter one. */
+    background-color: var(--bg-hatch-dark);
+    background-image: var(--placeholder-dark);
     background-size: cover;
     background-position: center;
 }
@@ -4047,7 +4051,7 @@ Create `SteamAchievements.UI/Game/GameHeader.razor.css`:
     padding: 7px 12px;
     border-radius: 7px;
     border: 1px solid var(--border-strong);
-    background: rgba(20, 19, 23, 0.6);
+    background: color-mix(in srgb, var(--bg-shell) 60%, transparent);
     color: var(--text-secondary);
     cursor: pointer;
 }
