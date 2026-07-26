@@ -1,0 +1,22 @@
+@* Routable components live in the class library, so the router has to be told
+   to look there as well as in this assembly. Not shared with Preview: that host
+   is server-rendered and its Routes.razor sits inside a different pipeline. *@
+<Router AppAssembly="typeof(Routes).Assembly"
+        AdditionalAssemblies="new[] { typeof(AppShell).Assembly }">
+    <Found Context="routeData">
+        <RouteView RouteData="routeData" DefaultLayout="typeof(AppShell)" />
+        <FocusOnNavigate RouteData="routeData" Selector="h1" />
+    </Found>
+    @* Not decoration. The host sends a first-run user to /onboarding, and a
+       Router with no NotFound section renders nothing at all when the route is
+       missing — which is the blank window this application is built to avoid.
+       Until the UI project ships that route, this says so out loud. *@
+    <NotFound>
+        <div style="padding: 40px; font-family: system-ui, sans-serif; color: #e8e6e3;">
+            <h1 style="font-size: 20px; margin: 0 0 12px;">Screen not available</h1>
+            <p style="color: #8b8b8b; margin: 0;">
+                This build has no component for that route yet.
+            </p>
+        </div>
+    </NotFound>
+</Router>
