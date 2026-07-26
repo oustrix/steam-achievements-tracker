@@ -70,7 +70,7 @@ Deliberately first and deliberately end-to-end: the riskiest part of this setup 
 
 **Files:**
 - Create: `SteamAchievements.sln`, four projects, `.github/workflows/ci.yml`
-- Test: `SteamAchievements.Core.Tests/SmokeTests.cs`
+- No test file: this task adds no tests (see Step 2 for why)
 
 **Interfaces:**
 - Consumes: nothing
@@ -143,15 +143,34 @@ jobs:
           --runtime win-x64
           --self-contained true
           -p:PublishSingleFile=true
+          -p:IncludeNativeLibrariesForSelfExtract=true
+          -p:EnableCompressionInSingleFile=true
           -p:PublishTrimmed=false
+          -p:DebugType=none
           --output publish
+      - name: Verify the publish output really is a single file
+        shell: pwsh
+        run: |
+          $files = Get-ChildItem publish -File
+          $files | ForEach-Object { "{0}  {1:N0} bytes" -f $_.Name, $_.Length }
+          if ($files.Count -ne 1) {
+            throw "Expected exactly one published file, found $($files.Count). PublishSingleFile is not packing everything."
+          }
       - uses: actions/upload-artifact@v4
         with:
           name: SteamAchievementsTracker-win-x64
           path: publish/
 ```
 
-Trimming stays off deliberately: WPF and Blazor use reflection, and a trimmed build fails at runtime in ways only reproducible on Windows.
+Trimming stays off deliberately: WPF and Blazor use reflection, and a trimmed
+build fails at runtime in ways only reproducible on Windows.
+
+`PublishSingleFile` alone is not enough for WPF: it packs managed assemblies
+but leaves native ones (`PresentationNative`, `wpfgfx_cor3`, `D3DCompiler`)
+beside the executable, which is why `IncludeNativeLibrariesForSelfExtract` is
+required. `DebugType=none` keeps `.pdb` symbols out of a user-facing artifact.
+The verification step turns "one file" from a claim into a build failure when
+it stops being true.
 
 - [ ] **Step 4: Commit and verify the pipeline end to end**
 
@@ -299,7 +318,12 @@ public sealed class VdfNode
 
     public string? Value { get; init; }
 
-    public IReadOnlyDictionary<string, VdfNode> Children => _children;
+    // Must be a ReadOnlyDictionary, not the backing Dictionary typed as an
+    // interface: the latter can be cast back and mutated, and because Empty is
+    // shared by every Parse call, one such cast would poison every later parse
+    // in the process.
+    public IReadOnlyDictionary<string, VdfNode> Children =>
+        new System.Collections.ObjectModel.ReadOnlyDictionary<string, VdfNode>(_children);
 
     public VdfNode this[string key] =>
         _children.TryGetValue(key, out var child) ? child : Empty;
@@ -331,6 +355,14 @@ public static class VdfParser
             var key = ReadToken(text, ref position);
             if (key is null)
             {
+                // Garbage at the top level must fail the same way it does
+                // inside a section, rather than being silently discarded.
+                SkipTrivia(text, ref position);
+                if (position < text.Length)
+                {
+                    throw new FormatException("Unexpected content after complete VDF structure.");
+                }
+
                 return root;
             }
 
@@ -405,6 +437,13 @@ public static class VdfParser
             }
 
             position++;
+        }
+
+        // Running out of input before the closing quote is malformed input,
+        // not a valid token.
+        if (position >= text.Length)
+        {
+            throw new FormatException("Unterminated quoted string.");
         }
 
         position++;
