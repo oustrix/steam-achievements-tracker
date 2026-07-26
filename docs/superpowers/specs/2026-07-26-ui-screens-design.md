@@ -522,6 +522,15 @@ and code signing.
   read the clock — `ILibraryQuery` takes `now` as a parameter, by design — so
   something above it has to supply one, and the sync screen needed a seam to
   render against before `SyncOrchestrator` is actually wired to it.
+- `QueuePage` calls `ILibraryQuery.GetQueue` in `OnInitialized`, so returning
+  to `/` from a game screen re-reads and rebuilds the whole library — about
+  1500 rows through `QueueRowBuilder` per navigation. Caching the materialized
+  queue in `QueueState` would remove it, and is deliberately not done here:
+  nothing can invalidate such a cache until `SyncOrchestrator` is wired to the
+  screens (section 14), so it would trade a real staleness bug — a finished
+  sync that the queue keeps hiding — for speed in a host that does not exist
+  yet. The host work owns this decision: whoever wires the sync should add the
+  cache and its invalidation together, not separately.
 - `SyncStatusView` gained a `SyncProblem` enum — none, rejected key, private
   profile, a different account signed in — and `SyncPage` switches on it.
   Section 7 lists the notices but not what decides between them, and the first
