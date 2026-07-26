@@ -85,8 +85,11 @@ known limitations.
 
 ## Getting started
 
-1. Download the latest `.exe` from Releases and run it. No installer, no
-   runtime to install.
+1. Download the latest release archive, unpack it anywhere, and run
+   `SteamAchievements.Windows.exe`. No installer, and no .NET runtime to
+   install — everything the application needs is inside that executable. The
+   `wwwroot` folder beside it holds the interface's stylesheets and fonts and
+   has to travel with it.
 2. The app finds your SteamID automatically from your local Steam
    installation and asks you to confirm it is you.
 3. Click the button to open the API key page — you are already signed in

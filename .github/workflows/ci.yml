@@ -48,17 +48,37 @@ jobs:
           -p:PublishTrimmed=false
           -p:DebugType=none
           --output publish
-      - name: Verify the publish output really is a single file
+      - name: Verify no loose libraries ship beside the executable
         shell: pwsh
         run: |
-          # -Recurse is load-bearing. Without it this step cannot see
-          # subdirectories, and both the WebView2 loader and the BlazorWebView
-          # static assets publish into subdirectories — so it would pass green
-          # on an artifact that is not a single file at all.
+          # This used to demand exactly one file. It cannot: BlazorWebView's
+          # static assets go through the static web assets pipeline, not through
+          # <Content>, so IncludeAllContentForSelfExtract does not reach them and
+          # they publish as a wwwroot tree. Verified on 2026-07-26 — the exe is
+          # 67 MB with every assembly and native library inside it, and the tree
+          # beside it is entirely css, js, fonts and their .br/.gz variants.
+          #
+          # What the original check was actually written to catch is a loose
+          # native library sitting next to the exe, which is how WebView2Loader
+          # and friends escape. That is what this asserts now, directly. -Recurse
+          # is load-bearing: without it the step cannot see subdirectories at
+          # all, and would pass green no matter what landed in them.
+          $root = (Resolve-Path publish).Path
           $files = Get-ChildItem publish -File -Recurse
-          $files | ForEach-Object { "{0}  {1:N0} bytes" -f $_.Name, $_.Length }
-          if ($files.Count -ne 1) {
-            throw "Expected exactly one published file, found $($files.Count). PublishSingleFile is not packing everything."
+          $files | ForEach-Object {
+            "{0}  {1:N0} bytes" -f $_.FullName.Substring($root.Length + 1), $_.Length
+          }
+
+          $binaries = $files | Where-Object {
+            $_.Extension -in '.dll', '.pdb' -or ($_.Extension -eq '.exe' -and $_.Name -ne 'SteamAchievements.Windows.exe')
+          }
+          if ($binaries) {
+            $names = ($binaries | ForEach-Object { $_.Name }) -join ', '
+            throw "Loose binaries in publish/: $names. PublishSingleFile is not packing everything."
+          }
+
+          if (-not (Test-Path (Join-Path $root 'SteamAchievements.Windows.exe'))) {
+            throw "SteamAchievements.Windows.exe is missing from publish/."
           }
       - uses: actions/upload-artifact@v4
         with:

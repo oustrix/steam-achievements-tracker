@@ -104,8 +104,7 @@ These cost real debugging time. Do not rediscover them.
   hides this completely; a real library breaks constantly.
 - **`PublishSingleFile` is not enough for WPF.** Without
   `IncludeNativeLibrariesForSelfExtract`, native libraries ship loose next to
-  the executable. CI has a step that fails the build if `publish/` contains more
-  than one file.
+  the executable. CI has a step that fails the build if any turn up there.
 - **Steam's error responses are HTML, not JSON**, and a missing key returns 400
   or 401 depending on the endpoint. See `docs/steam-api.md`.
 - **The UI must not read through `GameRepository`.** It wraps the sync
@@ -119,10 +118,14 @@ These cost real debugging time. Do not rediscover them.
   `scrollTop = index * rowHeight`. That is why the queue row height is a fixed
   constant duplicated between `QueuePage.razor` and its stylesheet — a
   mismatch shows up as drift, not as an error.
-- **The publish check needs `-Recurse`.** `Get-ChildItem publish -File` does not
-  see subdirectories, and both WebView2's loader and BlazorWebView's static
-  assets publish into them. Without `-Recurse` the check passes green on an
-  artifact that is not a single file.
+- **The published artifact is an exe plus a `wwwroot` tree, not one file.**
+  BlazorWebView's static assets travel through the static web assets pipeline
+  rather than as `<Content>`, so `IncludeAllContentForSelfExtract` does not
+  reach them — measured, not assumed. Every assembly and native library *is*
+  inside the 67 MB exe. The CI check therefore asserts "no loose `.dll`/`.pdb`
+  anywhere, and no other `.exe`", which is the failure it was written to catch;
+  it uses `-Recurse`, without which it cannot see subdirectories at all and
+  passes green on anything.
 - **`Microsoft.Web.WebView2` copies its loader twice.** Its `Common.targets`
   adds `WebView2Loader.dll` as a `Content` item linked into
   `runtimes\win-x64\native\`, separately from the RID asset `PublishSingleFile`

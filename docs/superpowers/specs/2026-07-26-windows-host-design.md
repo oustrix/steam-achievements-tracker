@@ -254,12 +254,32 @@ design doc §11 rests on; embedding static assets as resources behind a custom
 file provider, which is the most code and the most risk, in the least
 verifiable project, for what two properties should deliver.
 
-**Honest status:** that `IncludeAllContentForSelfExtract` coexists with
-`BlazorWebView` follows from how both work, but it is verified only by the
-first push. If the artifact is still not a single file, the fallback is the
-folder-plus-allowlist option, adopted with its reason written down. Naming
-the fallback now keeps that decision from being made in a hurry against a red
-build.
+**Outcome, verified 2026-07-26 — the hypothesis was wrong, and the fallback
+was taken.** `IncludeAllContentForSelfExtract` does not reach BlazorWebView's
+static assets, because they are not `Content` items: they travel through the
+static web assets pipeline, which is why the publish output carries a
+`staticwebassets.endpoints.json`, fingerprinted names like
+`SteamAchievements.UI.nq9585yljm.bundle.scp.css`, and `.br`/`.gz` variants of
+every text file. No MSBuild property bridges those two mechanisms.
+
+What did work is the part that mattered: the executable is 67 MB with every
+assembly and native library inside it, and **`WebView2Loader.dll` does not
+appear anywhere in the output**, so
+`WebView2NeverCopyLoaderDllToOutputDirectory` closed the trap this section was
+written about. The tree beside the exe is entirely css, js, fonts and their
+compressed variants.
+
+So the artifact is one executable plus a `wwwroot` tree, not one file. The
+self-contained property that design doc §11 actually rests on — no .NET Desktop
+Runtime to install — is untouched; what is lost is the cosmetic "one file to
+download", and downloads arrive as a zip regardless.
+
+The CI check was rewritten rather than relaxed. Demanding one file asserts
+something unachievable, so it now asserts what the check was written to catch
+in the first place: **no `.dll` or `.pdb` anywhere in the output, and no
+executable other than the host's**. A loose native library beside the exe still
+fails the build, which is the failure mode that motivated the check; a
+stylesheet no longer does.
 
 **A missing WebView2 runtime** otherwise produces an empty window. The host
 calls `CoreWebView2Environment.GetAvailableBrowserVersionString()` before
