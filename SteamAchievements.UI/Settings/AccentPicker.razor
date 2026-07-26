@@ -5,7 +5,7 @@
                 style="background: @value"
                 title="@name"
                 aria-label="@name"
-                aria-pressed="@(Selected == value)"
+                aria-pressed="@(Selected == value ? "true" : "false")"
                 @onclick="() => OnSelect.InvokeAsync(value)">
         </button>
     }
