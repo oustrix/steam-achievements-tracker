@@ -13,16 +13,24 @@ public sealed class SteamApiClient
     private readonly HttpClient _http;
     private readonly string _apiKey;
 
+    // The key is free text pasted by the user (see the constructor comment),
+    // so it must be percent-encoded before landing in a query string. An
+    // unescaped '&' injects extra parameters; an unescaped '#' truncates the
+    // request at a URI fragment, silently dropping everything after it.
+    private string EscapedKey => Uri.EscapeDataString(_apiKey);
+
     public SteamApiClient(HttpClient http, string apiKey)
     {
         _http = http;
-        _apiKey = apiKey;
+        // Onboarding fills this field from the clipboard, which is exactly
+        // where a stray newline or trailing space shows up.
+        _apiKey = apiKey.Trim();
     }
 
     public async Task<IReadOnlyList<OwnedGame>> GetOwnedGamesAsync(ulong steamId, CancellationToken cancellationToken)
     {
         var envelope = await GetJsonAsync<OwnedGamesEnvelope>(
-            $"IPlayerService/GetOwnedGames/v1/?key={_apiKey}&steamid={steamId}" +
+            $"IPlayerService/GetOwnedGames/v1/?key={EscapedKey}&steamid={steamId}" +
             "&include_appinfo=1&include_played_free_games=1", cancellationToken);
 
         // A private profile answers 200 with an empty response object.
@@ -41,7 +49,7 @@ public sealed class SteamApiClient
     public async Task<IReadOnlyList<AchievementSchema>> GetSchemaForGameAsync(uint appId, CancellationToken cancellationToken)
     {
         var envelope = await GetJsonAsync<SchemaEnvelope>(
-            $"ISteamUserStats/GetSchemaForGame/v2/?key={_apiKey}&appid={appId}&l=english", cancellationToken);
+            $"ISteamUserStats/GetSchemaForGame/v2/?key={EscapedKey}&appid={appId}&l=english", cancellationToken);
 
         var achievements = envelope.Game?.Stats?.Achievements ?? [];
 
@@ -63,7 +71,7 @@ public sealed class SteamApiClient
         ulong steamId, uint appId, CancellationToken cancellationToken)
     {
         var envelope = await GetJsonAsync<PlayerStatsEnvelope>(
-            $"ISteamUserStats/GetPlayerAchievements/v1/?key={_apiKey}&steamid={steamId}&appid={appId}&l=english",
+            $"ISteamUserStats/GetPlayerAchievements/v1/?key={EscapedKey}&steamid={steamId}&appid={appId}&l=english",
             cancellationToken);
 
         return envelope.PlayerStats?.Achievements?
@@ -87,9 +95,15 @@ public sealed class SteamApiClient
         var envelope = await GetJsonAsync<GlobalPercentagesEnvelope>(
             $"ISteamUserStats/GetGlobalAchievementPercentagesForApp/v2/?gameid={appId}", cancellationToken);
 
+        // Group rather than ToDictionary-ing directly: a duplicate name must
+        // degrade to "keep the first entry", not throw. A caller catching
+        // SteamApiException per-game (see Task 8's orchestrator) would let a
+        // raw ArgumentException here escape and abort the whole sync instead
+        // of skipping one bad game.
         return envelope.Percentages?.Achievements?
             .Where(a => a.Name is not null)
-            .ToDictionary(a => a.Name!, a => a.Percent)
+            .GroupBy(a => a.Name!)
+            .ToDictionary(g => g.Key, g => g.First().Percent)
             ?? new Dictionary<string, double>();
     }
 

@@ -92,4 +92,80 @@ public class SteamApiEndpointTests
         Assert.Equal(62.4, percentages["ACH_1"], 1);
         Assert.Equal(0.4, percentages["ACH_2"], 1);
     }
+
+    [Fact]
+    public async Task EscapesApiKeyContainingAmpersandSoOtherParametersSurviveIntact()
+    {
+        var body = await File.ReadAllTextAsync(TestPaths.Data("owned_games.json"));
+        var handler = FakeHttpMessageHandler.Returning(HttpStatusCode.OK, body);
+        var client = new SteamApiClient(
+            new HttpClient(handler) { BaseAddress = new Uri("https://api.steampowered.com/") },
+            "AB&steamid=999&evil=1");
+
+        await client.GetOwnedGamesAsync(76561190000000002, CancellationToken.None);
+
+        // PathAndQuery is what actually reaches the wire — ToString() would
+        // misleadingly retain a URI fragment that HTTP never transmits.
+        var url = handler.Requests.Single().PathAndQuery;
+        Assert.Contains("steamid=76561190000000002", url);
+        Assert.Contains("include_appinfo=1", url);
+        Assert.Contains("include_played_free_games=1", url);
+        Assert.DoesNotContain("evil=1", url);
+    }
+
+    [Fact]
+    public async Task EscapesApiKeyContainingFragmentSoTrailingParametersAreNotDropped()
+    {
+        var body = await File.ReadAllTextAsync(TestPaths.Data("owned_games.json"));
+        var handler = FakeHttpMessageHandler.Returning(HttpStatusCode.OK, body);
+        var client = new SteamApiClient(
+            new HttpClient(handler) { BaseAddress = new Uri("https://api.steampowered.com/") },
+            "AB#fragment&steamid=999");
+
+        await client.GetOwnedGamesAsync(76561190000000002, CancellationToken.None);
+
+        // PathAndQuery excludes the fragment entirely, so this is the only way
+        // to see whether the '#' truncated the actual outgoing request.
+        var url = handler.Requests.Single().PathAndQuery;
+        Assert.Contains("steamid=76561190000000002", url);
+        Assert.Contains("include_appinfo=1", url);
+        Assert.Contains("include_played_free_games=1", url);
+    }
+
+    [Fact]
+    public async Task TrimsWhitespacePastedIntoTheApiKey()
+    {
+        var body = await File.ReadAllTextAsync(TestPaths.Data("owned_games.json"));
+        var handler = FakeHttpMessageHandler.Returning(HttpStatusCode.OK, body);
+        var client = new SteamApiClient(
+            new HttpClient(handler) { BaseAddress = new Uri("https://api.steampowered.com/") },
+            "  TESTKEY\n");
+
+        await client.GetOwnedGamesAsync(76561190000000002, CancellationToken.None);
+
+        var url = handler.Requests.Single().PathAndQuery;
+        Assert.Contains("key=TESTKEY&", url);
+    }
+
+    [Fact]
+    public async Task DeduplicatesGlobalPercentagesByKeepingFirstOccurrenceInsteadOfThrowing()
+    {
+        var handler = FakeHttpMessageHandler.Returning(HttpStatusCode.OK,
+            """
+            {
+              "achievementpercentages": {
+                "achievements": [
+                  { "name": "ACH_1", "percent": 62.4 },
+                  { "name": "ACH_1", "percent": 10.0 }
+                ]
+              }
+            }
+            """);
+        var client = new SteamApiClient(new HttpClient(handler) { BaseAddress = new Uri("https://api.steampowered.com/") }, "TESTKEY");
+
+        var percentages = await client.GetGlobalPercentagesAsync(292030, CancellationToken.None);
+
+        Assert.Single(percentages);
+        Assert.Equal(62.4, percentages["ACH_1"], 1);
+    }
 }
