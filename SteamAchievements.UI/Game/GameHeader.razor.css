@@ -1,10 +1,11 @@
 .banner {
     position: relative;
     height: 230px;
-    /* The hatch shows through when header.jpg is missing, which is the same
-       placeholder the queue covers fall back to. */
-    background-color: #1d1b22;
-    background-image: repeating-linear-gradient(135deg, #232028 0 10px, #1d1b22 10px 20px);
+    /* The hatch shows through when header.jpg is missing: the darker of the
+       mockup's two placeholder hatches, reserved for large covers and this
+       banner. Small achievement icons fall back to the lighter one instead. */
+    background-color: var(--bg-hatch-dark);
+    background-image: var(--placeholder-dark);
     background-size: cover;
     background-position: center;
 }
@@ -18,7 +19,7 @@
     padding: 7px 12px;
     border-radius: 7px;
     border: 1px solid var(--border-strong);
-    background: rgba(20, 19, 23, 0.6);
+    background: color-mix(in srgb, var(--bg-shell) 60%, transparent);
     color: var(--text-secondary);
     cursor: pointer;
 }

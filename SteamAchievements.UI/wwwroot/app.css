@@ -55,6 +55,14 @@
     --dot-off: #3d3844;
 
     --placeholder: repeating-linear-gradient(135deg, #2b2833 0 6px, #232028 6px 12px);
+
+    /*
+      The mockup uses two hatches: this lighter one for small achievement
+      icons and queue covers, and the darker pair below for large covers
+      and the game screen's banner.
+    */
+    --placeholder-dark: repeating-linear-gradient(135deg, #232028 0 10px, #1d1b22 10px 20px);
+    --bg-hatch-dark: #1d1b22;
 }
 
 * { box-sizing: border-box; }
