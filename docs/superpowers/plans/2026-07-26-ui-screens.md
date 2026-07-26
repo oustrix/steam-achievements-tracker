@@ -2453,6 +2453,7 @@ Replace `SteamAchievements.Preview/Program.cs`:
 using SteamAchievements.Core.Presentation;
 using SteamAchievements.Preview.Components;
 using SteamAchievements.Preview.Fixtures;
+using SteamAchievements.UI.Layout;
 using SteamAchievements.UI.State;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -2475,7 +2476,15 @@ var app = builder.Build();
 
 app.UseStaticFiles();
 app.UseAntiforgery();
-app.MapRazorComponents<App>().AddInteractiveServerRenderMode();
+
+// AddAdditionalAssemblies is not the same thing as the Router's
+// AdditionalAssemblies in Routes.razor, and both are required. The Router
+// parameter covers client-side navigation once the circuit is live; this one
+// tells the SERVER's endpoint matcher that @page routes exist in the RCL.
+// Without it the first request to "/" is a silent, unlogged 404.
+app.MapRazorComponents<App>()
+   .AddInteractiveServerRenderMode()
+   .AddAdditionalAssemblies(typeof(AppShell).Assembly);
 
 app.Run();
 
