@@ -1,0 +1,285 @@
+# Steam Achievements Tracker — Design
+
+Date: 2026-07-26
+Status: approved, ready to be broken down into tasks
+
+## 1. Goal
+
+A Windows desktop application that pulls in the user's Steam library and helps
+decide which game to complete to 100% next.
+
+Distributed as a regular program: everyone downloads it and connects their own
+account. The app works with a single account — whichever one is logged into
+Steam on that machine.
+
+## 2. Development environment constraints
+
+These drive many of the decisions below, so they come first.
+
+- Development happens on macOS. The application is never run locally.
+- Verification path: push → GitHub Actions → download artifact → run on a
+  separate Windows machine. Roughly a 3-5 minute cycle.
+- Consequence: anything verifiable through `dotnet test` on macOS must be
+  verified that way. Only what cannot physically be checked otherwise goes
+  through CI.
+- WPF does not compile on macOS. Windows-specific code is isolated in its own
+  project behind interfaces.
+
+## 3. Accessing Steam data
+
+### 3.1 Verified fact: an API key is mandatory
+
+Verified with live requests on 2026-07-25 (details in `docs/steam-api.md`):
+
+- Community XML (`/games?tab=all&xml=1`), which used to serve the library
+  without a key, now redirects anonymous callers to `/login` (HTTP 302).
+- `GetOwnedGames` without a key returns HTTP 401.
+- Still public: `/profiles/<id>/?xml=1` (persona name, avatar) and
+  `GetGlobalAchievementPercentagesForApp` (global rarity).
+
+There is no legitimate way to read a library and personal achievements without
+a key. The goal is therefore not to avoid the key, but to make obtaining it
+nearly invisible.
+
+### 3.2 Rejected authentication options
+
+| Option | Why rejected |
+|---|---|
+| Steamworks SDK (`steam_api.dll`) | Only works from inside a game with its own appid; cannot read an arbitrary library |
+| Steam client protocol login (`steamcmd`-style) | Requires password and 2FA, ToS grey area, puts the account at risk |
+| Developer key hardcoded into the binary | The 100k/day quota would be shared by all users, and the key would be extracted from the binary |
+| Backend proxy holding our key | Same quota problem plus hosting costs; contradicts the local-application model |
+
+### 3.3 Chosen approach: hybrid
+
+1. **SteamID — zero user action.** Steam path from the registry
+   (`HKCU\Software\Valve\Steam\SteamPath`), then `config/loginusers.vdf`, then
+   the account flagged `MostRecent="1"`. Persona name and avatar for
+   confirmation come from the public `?xml=1` endpoint.
+2. **API key — a single paste.** A button opens the browser on the key
+   issuance page, where the user is already signed in. Meanwhile the app
+   watches the clipboard and fills the key in automatically once it sees 32
+   hex characters.
+3. **Key storage** — DPAPI scoped to the current Windows user. The key is
+   never written to disk in plaintext.
+
+Fallback when Steam cannot be located: manual entry of a SteamID64 or profile
+URL.
+
+Known limitation: Steam only issues API keys to accounts with at least $5 in
+purchases. Handled with explanatory text during onboarding rather than a
+failure.
+
+## 4. Stack
+
+| Layer | Choice |
+|---|---|
+| Platform | .NET 10 (LTS, 10.0.302 locally) |
+| Shell | WPF + BlazorWebView (WebView2) |
+| UI | Blazor components (Razor Class Library) |
+| Storage | SQLite |
+| CI | GitHub Actions |
+
+Rationale: the project's complexity splits between the sync engine (network,
+concurrency, resilience) and the UI (a 1500-row grid, charts later). .NET is
+strong at the former, Blazor covers the latter with web technology while
+staying in one language, and Windows specifics (registry, DPAPI, installer)
+are native territory for .NET.
+
+Rejected: Fyne/Avalonia and native GUI toolkits generally — a virtualized grid
+and charts become a project of their own there; Electron — bundle size and a
+weaker sync engine; Rust/Tauri — the learning cost does not pay off here.
+
+Blazor shell: WPF + BlazorWebView chosen as the most well-trodden path.
+Rejected alternatives were ASP.NET Core in a browser tab (does not feel like
+an application) and Photino (niche technology, few answers when it breaks).
+
+## 5. Solution structure
+
+```
+SteamAchievements.Core            net10.0          builds and tests on macOS
+├─ Steam/         SteamApiClient, rate limiter, retry, DTOs
+├─ Local/         VdfParser, LoginUsersReader          (pure text parsing)
+├─ Data/          SQLite, schema, migrations, repositories
+├─ Sync/          SyncOrchestrator, scheduler, progress
+├─ Analytics/     achievement cost, ranking
+└─ Abstractions/  ISteamPathProvider, ISecretStore     contracts only
+
+SteamAchievements.Core.Tests      net10.0          dotnet test on macOS
+SteamAchievements.UI              net10.0          Razor Class Library
+SteamAchievements.Windows         net10.0-windows  WPF + BlazorWebView,
+                                                   RegistrySteamPathProvider,
+                                                   DpapiSecretStore (~150 lines)
+```
+
+Boundary rule: code that parses text (VDF, JSON) lives in Core and is tested
+on macOS. Code that calls Windows APIs (registry, DPAPI) lives in
+`SteamAchievements.Windows` behind an interface declared in `Abstractions`.
+
+## 6. Data model
+
+```
+settings             steam_id64, persona_name, avatar_url, api_key_protected,
+                     last_full_sync_at
+games                app_id PK, name, icon_hash, has_achievements,
+                     schema_synced_at
+owned_games          app_id PK, playtime_forever, playtime_2weeks,
+                     last_played_at
+achievements         app_id, api_name (PK), display_name, description,
+                     icon_url, icon_gray_url, is_hidden,
+                     sort_order, first_seen_at
+global_percents      app_id, api_name (PK), percent, fetched_at
+player_achievements  app_id, api_name (PK), unlocked, unlocked_at
+sync_state           app_id PK, last_sync_at, last_error
+snapshots            taken_at, unlocked_total, avg_rarity, completion_pct
+```
+
+At 1500 games this is roughly 60 thousand achievement rows — negligible for
+SQLite. The bottleneck is entirely in the network.
+
+Two fields are collected ahead of time and unused in the MVP:
+
+- `sort_order` and `first_seen_at` — groundwork for separating base game from
+  DLC achievements later (see 10.1). Neither can be reconstructed
+  retroactively.
+- `snapshots` — one row per sync, the basis for future trend charts. History
+  cannot be backfilled, so it is written from day one.
+
+`steam_id64` in `settings` is checked at startup: if the user switched Steam
+accounts, the app says so instead of silently blending two libraries. That is
+one check, not multi-account support.
+
+## 7. Sync engine
+
+Sequence:
+
+1. `GetOwnedGames` — one request, the whole library with playtime.
+2. The scheduler selects games where `playtime_forever` changed, or which were
+   never synced, or whose schema (30-day TTL) or global percentages (7-day
+   TTL) went stale.
+3. Queue processing: `Parallel.ForEachAsync`, 4-6 workers on top of a token
+   bucket limited to ~5 requests per second.
+4. `sync_state` is written after every game, making a sync resumable across
+   application restarts.
+5. A snapshot row is written at the end.
+
+**The key optimization.** `GetOwnedGames` returns playtime for every game in a
+single cheap request. If playtime has not changed, achievements almost
+certainly have not either, so the progress request is skipped entirely.
+
+```
+Full sync (1500 games, ~60% with achievements):  1 + 900×3 ≈ 2700 requests, ~9 min
+Incremental sync after a gaming session:         ~5 requests, ~2 seconds
+```
+
+Resilience: Polly with exponential backoff (1→2→4→8 s) on 429 and 5xx,
+honouring `Retry-After`; retries are forbidden on 401 since that means a bad
+key rather than a network fault; five consecutive failures trip a circuit
+breaker, pausing the sync with a message in the UI.
+
+Response handling and error codes live in `docs/steam-api.md`.
+
+## 8. Ranking formula
+
+```
+relative(a)  = percent(a) / max(percent across this game's achievements)
+cost(a)      = -log2( max(relative(a), 0.001) )
+effort(game) = Σ cost(a) over locked achievements
+```
+
+Games are sorted by ascending `effort`.
+
+Normalizing against the game's own maximum removes the "bought but never
+launched" distortion: global percentages are computed across all owners,
+including those who never started the game, which makes raw percentages
+incomparable between titles. After normalization a game's most common
+achievement costs 0, and cost grows logarithmically — half as common adds one.
+
+Mandatory implementation details:
+
+- `percent` can be exactly 0; without clamping the logarithm goes to infinity.
+- Global percentages may be missing entirely (fresh releases) — fall back to
+  equal weights and label rarity as unknown.
+- `relative < 0.02` marks an achievement as a blocker and flags the game as
+  "100% questionable". Flagged, not excluded — that call belongs to the user.
+
+## 9. Screens
+
+**Completion queue (main screen).** A virtualized list of cards: cover art
+(`library_600x900.jpg`), title, progress (`37 of 44`), remaining effort, and —
+crucially — a "why it is here" line such as *"3 left: two common, one rare
+(2.1%)"*. Without that explanation any recommendation list reads as guesswork.
+Filters: hide games with blockers, minimum playtime, title search.
+
+**Game screen.** `header.jpg` banner, progress, playtime. The "remaining"
+section is sorted by cost, cheapest first; the "unlocked" section by unlock
+date. Hidden achievements are shown as hidden: for `hidden: 1` Steam usually
+returns an empty description, and there is nowhere to source it in the MVP.
+
+**Sync panel.** Progress, counter, cancel.
+
+**Settings.** Key, account, cache TTLs, database reset.
+
+## 10. Explicitly out of scope for the MVP
+
+### 10.1 Separating base game and DLC achievements
+
+Verified: this does not exist as a concept in Steam's data. Witcher 3 (292030)
+exposes 78 achievements for the base game — exactly `achievements.total` — and
+none of its 22 DLC appids (`355880`, `378648`, `378649`, …) have achievement
+pages at all. Stellaris (281990) exposes 219 achievements in one flat list
+where DLC achievements carry no marker. Neither `GetSchemaForGame` nor
+`store/appdetails` returns a DLC flag.
+
+Not handled in any way in the MVP. Only `sort_order` and `first_seen_at` are
+collected as raw material for a future heuristic.
+
+Accepted consequence: a game like Stellaris will show a low completion
+percentage even when everything obtainable without buying DLC is unlocked.
+
+### 10.2 Other non-goals
+
+- Full library grid and statistics dashboard — they grow from the same data as
+  extra queries, and come after the primary scenario works.
+- Trend charts — data accumulates in `snapshots` from day one, the screen
+  comes later.
+- Friend comparison, multiple accounts.
+- Code signing: an unsigned `.exe` triggers SmartScreen. A certificate costs
+  $200-400 per year and does not pay off for an MVP — explained in the README
+  instead.
+
+## 11. CI and distribution
+
+```
+test:           ubuntu-latest    dotnet test Core.Tests       ~40 s
+build-windows:  windows-latest   dotnet publish -r win-x64    ~3 min
+                                 → artifact, on tags → Release
+```
+
+Tests run on Linux because they never touch Windows APIs and the cheaper
+runner is faster. The build runs only on `windows-latest` because of WPF.
+
+Published as self-contained single-file: ~80-100 MB versus ~5 MB for
+framework-dependent, but users do not need to install the .NET Desktop
+Runtime. Under a "everyone downloads it themselves" model, an extra runtime
+step costs more than a hundred megabytes.
+
+Trimming stays off: Blazor and WPF rely on reflection, and a trimmed build
+fails at runtime in ways only discoverable on Windows through CI.
+
+WebView2 is usually already present on Win10/11 (it ships with Edge), but the
+installer must account for its bootstrapper — otherwise some users will just
+see an empty window.
+
+## 12. Testing
+
+`ISteamApiClient` lives in Core with a typed `HttpClient` implementation.
+Tests substitute an `HttpMessageHandler` that replays recorded fixtures.
+
+Fixtures are captured once on Windows with a real key, anonymized (`steamid`,
+`key`) and committed under `testdata/`, alongside real `loginusers.vdf` and
+`appmanifest_*.acf` samples for the VDF parser tests.
+
+This makes the following verifiable on macOS: the VDF parser, classification
+of every API error, the sync scheduler, the ranking formula, and database
+migrations.

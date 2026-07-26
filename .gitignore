@@ -1,0 +1,34 @@
+## .NET build output
+bin/
+obj/
+[Dd]ebug/
+[Rr]elease/
+artifacts/
+publish/
+*.user
+*.suo
+
+## Rider / Visual Studio / VS Code
+.idea/
+.vs/
+.vscode/
+*.userprefs
+
+## Test results
+[Tt]est[Rr]esult*/
+coverage*.json
+coverage*.xml
+*.trx
+
+## macOS
+.DS_Store
+
+## Local runtime data — never commit
+*.db
+*.db-shm
+*.db-wal
+secrets.json
+appsettings.Local.json
+
+## Fixtures must be anonymized before committing; raw captures stay local
+testdata/**/*.raw.json
