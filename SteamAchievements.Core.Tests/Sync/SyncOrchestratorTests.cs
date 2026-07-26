@@ -11,6 +11,14 @@ public class SyncOrchestratorTests
 {
     private static readonly ulong SteamId = 76561190000000002;
 
+    // SteamApiClient now rate-limits every outgoing request intrinsically
+    // (~5/s in production). These tests drive several requests through one
+    // client to exercise retry/circuit-breaker/multi-worker behavior, so they
+    // inject a limiter fast enough to be a no-op — otherwise the suite would
+    // start sleeping in real wall-clock time for a concern these tests aren't
+    // about.
+    private static RateLimiter NoRateLimit() => new(requestsPerSecond: 1_000_000);
+
     private static HttpResponseMessage Json(string body) =>
         new(HttpStatusCode.OK) { Content = new StringContent(body, System.Text.Encoding.UTF8, "application/json") };
 
@@ -41,7 +49,7 @@ public class SyncOrchestratorTests
         });
 
         var client = new SteamApiClient(
-            new HttpClient(handler) { BaseAddress = new Uri("https://api.steampowered.com/") }, "TESTKEY");
+            new HttpClient(handler) { BaseAddress = new Uri("https://api.steampowered.com/") }, "TESTKEY", NoRateLimit());
         var repository = new GameRepository(Database.Open(":memory:"));
 
         return (new SyncOrchestrator(client, repository, SyncOptions.Default), repository, handler);
@@ -81,13 +89,29 @@ public class SyncOrchestratorTests
     public async Task ReportsProgressForEveryProcessedGame()
     {
         var (sync, _, _) = await Build();
-        var reports = new List<SyncProgress>();
 
-        await sync.RunAsync(SteamId, force: false, new Progress<SyncProgress>(reports.Add), CancellationToken.None);
+        // Progress<T> marshals each report asynchronously (via the captured
+        // SynchronizationContext, or a ThreadPool post if none was captured),
+        // so with WorkerCount workers reporting concurrently, callbacks can
+        // run on several threads at once — a plain List<T> is not safe under
+        // concurrent Add.
+        var reports = new System.Collections.Concurrent.ConcurrentQueue<SyncProgress>();
 
-        await Task.Delay(50); // Progress<T> marshals asynchronously
+        await sync.RunAsync(SteamId, force: false, new Progress<SyncProgress>(reports.Enqueue), CancellationToken.None);
+
+        // Reports can still be in flight after RunAsync returns, and their
+        // arrival order across threads isn't guaranteed, so poll for the
+        // highest Completed value to reach Total rather than assuming the
+        // last-enqueued report is the final one.
+        var deadline = DateTime.UtcNow.AddSeconds(1);
+        while ((reports.IsEmpty || reports.Max(r => r.Completed) != reports.Max(r => r.Total))
+               && DateTime.UtcNow < deadline)
+        {
+            await Task.Delay(10);
+        }
+
         Assert.NotEmpty(reports);
-        Assert.Equal(reports[^1].Total, reports[^1].Completed);
+        Assert.Equal(reports.Max(r => r.Total), reports.Max(r => r.Completed));
     }
 
     [Fact]
@@ -111,7 +135,7 @@ public class SyncOrchestratorTests
         });
 
         var sync = new SyncOrchestrator(
-            new SteamApiClient(new HttpClient(handler) { BaseAddress = new Uri("https://api.steampowered.com/") }, "BAD"),
+            new SteamApiClient(new HttpClient(handler) { BaseAddress = new Uri("https://api.steampowered.com/") }, "BAD", NoRateLimit()),
             new GameRepository(Database.Open(":memory:")),
             SyncOptions.Default);
 
@@ -149,7 +173,7 @@ public class SyncOrchestratorTests
         });
 
         var sync = new SyncOrchestrator(
-            new SteamApiClient(new HttpClient(handler) { BaseAddress = new Uri("https://api.steampowered.com/") }, "TESTKEY"),
+            new SteamApiClient(new HttpClient(handler) { BaseAddress = new Uri("https://api.steampowered.com/") }, "TESTKEY", NoRateLimit()),
             new GameRepository(Database.Open(":memory:")),
             SyncOptions.Default,
             retryBaseDelay: TimeSpan.FromMilliseconds(1));
@@ -184,7 +208,7 @@ public class SyncOrchestratorTests
         });
 
         var sync = new SyncOrchestrator(
-            new SteamApiClient(new HttpClient(handler) { BaseAddress = new Uri("https://api.steampowered.com/") }, "TESTKEY"),
+            new SteamApiClient(new HttpClient(handler) { BaseAddress = new Uri("https://api.steampowered.com/") }, "TESTKEY", NoRateLimit()),
             new GameRepository(Database.Open(":memory:")),
             SyncOptions.Default,
             retryBaseDelay: TimeSpan.FromMilliseconds(1));
@@ -243,7 +267,7 @@ public class SyncOrchestratorTests
         });
 
         var sync = new SyncOrchestrator(
-            new SteamApiClient(new HttpClient(handler) { BaseAddress = new Uri("https://api.steampowered.com/") }, "TESTKEY"),
+            new SteamApiClient(new HttpClient(handler) { BaseAddress = new Uri("https://api.steampowered.com/") }, "TESTKEY", NoRateLimit()),
             new GameRepository(Database.Open(":memory:")),
             SyncOptions.Default);
 
@@ -297,7 +321,7 @@ public class SyncOrchestratorTests
         });
 
         var sync = new SyncOrchestrator(
-            new SteamApiClient(new HttpClient(handler) { BaseAddress = new Uri("https://api.steampowered.com/") }, "TESTKEY"),
+            new SteamApiClient(new HttpClient(handler) { BaseAddress = new Uri("https://api.steampowered.com/") }, "TESTKEY", NoRateLimit()),
             new GameRepository(Database.Open(":memory:")),
             SyncOptions.Default);
 

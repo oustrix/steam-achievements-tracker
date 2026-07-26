@@ -15,7 +15,6 @@ public sealed class SyncOrchestrator
     private readonly SteamApiClient _client;
     private readonly GameRepository _repository;
     private readonly SyncOptions _options;
-    private readonly RateLimiter _rateLimiter = new(requestsPerSecond: 5);
     private readonly ResiliencePipeline _retry;
 
     /// <summary>
@@ -115,7 +114,6 @@ public sealed class SyncOrchestrator
 
             if (item.NeedSchema)
             {
-                await _rateLimiter.WaitAsync(cancellationToken);
                 var schema = await _retry.ExecuteAsync(
                     async token => await _client.GetSchemaForGameAsync(item.AppId, token), cancellationToken);
 
@@ -130,7 +128,6 @@ public sealed class SyncOrchestrator
 
             if (item.NeedGlobal)
             {
-                await _rateLimiter.WaitAsync(cancellationToken);
                 var percentages = await _retry.ExecuteAsync(
                     async token => await _client.GetGlobalPercentagesAsync(item.AppId, token), cancellationToken);
 
@@ -139,7 +136,6 @@ public sealed class SyncOrchestrator
 
             if (item.NeedPlayer)
             {
-                await _rateLimiter.WaitAsync(cancellationToken);
                 var playerAchievements = await _retry.ExecuteAsync(
                     async token => await _client.GetPlayerAchievementsAsync(steamId, item.AppId, token), cancellationToken);
 

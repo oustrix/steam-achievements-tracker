@@ -12,6 +12,7 @@ public sealed class SteamApiClient
 
     private readonly HttpClient _http;
     private readonly string _apiKey;
+    private readonly RateLimiter _rateLimiter;
 
     // The key is free text pasted by the user (see the constructor comment),
     // so it must be percent-encoded before landing in a query string. An
@@ -19,12 +20,20 @@ public sealed class SteamApiClient
     // request at a URI fragment, silently dropping everything after it.
     private string EscapedKey => Uri.EscapeDataString(_apiKey);
 
-    public SteamApiClient(HttpClient http, string apiKey)
+    /// <param name="rateLimiter">
+    /// Defaults to the production ~5 requests/second budget Steam tolerates.
+    /// Tests inject a much faster limiter so a scenario driving several
+    /// requests through one client runs in milliseconds rather than real
+    /// seconds — the gating behavior (every request through this client is
+    /// throttled) stays identical either way.
+    /// </param>
+    public SteamApiClient(HttpClient http, string apiKey, RateLimiter? rateLimiter = null)
     {
         _http = http;
         // Onboarding fills this field from the clipboard, which is exactly
         // where a stray newline or trailing space shows up.
         _apiKey = apiKey.Trim();
+        _rateLimiter = rateLimiter ?? new RateLimiter(requestsPerSecond: 5);
     }
 
     public async Task<IReadOnlyList<OwnedGame>> GetOwnedGamesAsync(ulong steamId, CancellationToken cancellationToken)
@@ -107,8 +116,17 @@ public sealed class SteamApiClient
             ?? new Dictionary<string, double>();
     }
 
+    // Every public method above funnels through here, so gating the rate
+    // limiter at this single choke point makes it intrinsic to the client
+    // rather than something each call site must remember — previously
+    // SyncOrchestrator called RateLimiter.WaitAsync manually before the
+    // schema/global/player requests but forgot the initial GetOwnedGamesAsync
+    // call, silently exceeding Steam's budget on the very first request of
+    // every sync.
     internal async Task<T> GetJsonAsync<T>(string path, CancellationToken cancellationToken)
     {
+        await _rateLimiter.WaitAsync(cancellationToken);
+
         HttpResponseMessage response;
         try
         {
