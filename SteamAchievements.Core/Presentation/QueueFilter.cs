@@ -25,7 +25,7 @@ public sealed record QueueCriteria(
 /// </summary>
 public static class QueueFilter
 {
-    public static IReadOnlyList<QueueRow> Apply(IReadOnlyList<QueueRow> rows, QueueCriteria criteria)
+    public static List<QueueRow> Apply(IReadOnlyList<QueueRow> rows, QueueCriteria criteria)
     {
         var query = criteria.Query.Trim();
 

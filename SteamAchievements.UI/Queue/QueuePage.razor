@@ -41,9 +41,8 @@
     private QueueView _queue = new([], 0);
 
     // List<QueueRow>, not IReadOnlyList<QueueRow>: Virtualize's Items parameter
-    // requires ICollection<TItem>, and QueueFilter.Apply always returns a List
-    // internally (via ToList()), so this narrows the static type to match the
-    // runtime type rather than copying the list again.
+    // requires ICollection<TItem>, which QueueFilter.Apply's return type
+    // provides directly.
     private List<QueueRow> _rows = [];
     private double _maxEffort;
     private ElementReference _list;
@@ -71,7 +70,7 @@
 
     private void Refresh()
     {
-        _rows = (List<QueueRow>)QueueFilter.Apply(_queue.Rows, State.Criteria);
+        _rows = QueueFilter.Apply(_queue.Rows, State.Criteria);
 
         // The bar scale is relative to what is on screen, so it is recomputed
         // whenever the filter changes rather than baked into the row.
