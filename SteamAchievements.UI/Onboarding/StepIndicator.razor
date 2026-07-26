@@ -1,0 +1,17 @@
+<div class="steps micro">
+    @for (var i = 0; i < Labels.Length; i++)
+    {
+        if (i > 0)
+        {
+            <span>—</span>
+        }
+        <span class="@(i < Current ? "done" : "")">@(i + 1) @Labels[i]</span>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public string[] Labels { get; set; } = [];
+
+    /// <summary>How many steps are reached; those before it are shown in the accent.</summary>
+    [Parameter] public int Current { get; set; }
+}
