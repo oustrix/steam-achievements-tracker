@@ -1,0 +1,40 @@
+.row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+
+.field {
+    flex: 1;
+    min-width: 240px;
+    font-size: 13px;
+    padding: 11px 13px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--bg-raised);
+    color: var(--text);
+}
+
+.field:focus { outline: none; border-color: var(--border-hover); }
+.field:disabled { opacity: 0.55; }
+
+.primary {
+    font: inherit;
+    font-size: 13px;
+    font-weight: 600;
+    padding: 11px 16px;
+    border-radius: 8px;
+    border: 0;
+    background: var(--accent);
+    color: var(--on-accent);
+    cursor: pointer;
+}
+
+.secondary {
+    font: inherit;
+    font-size: 13px;
+    padding: 11px 14px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--bg-selected);
+    color: var(--text);
+    cursor: pointer;
+}
+
+.primary:disabled, .secondary:disabled { opacity: 0.55; cursor: default; }

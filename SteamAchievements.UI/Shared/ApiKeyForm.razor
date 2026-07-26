@@ -1,0 +1,78 @@
+@inject IOnboarding Onboarding
+@inject IExternalLinks Links
+@implements IDisposable
+
+<div class="row">
+    <input class="field num" type="text" autocomplete="off" spellcheck="false"
+           placeholder="32 hexadecimal characters"
+           disabled="@_busy"
+           @bind="_pasted" @bind:event="oninput" />
+
+    <button class="secondary" type="button" disabled="@_busy" @onclick="() => Links.OpenApiKeyPage()">
+        Open key page
+    </button>
+
+    <button class="primary" type="button" disabled="@(_busy || _pasted.Trim().Length == 0)" @onclick="Submit">
+        @(_busy ? "Checking…" : SubmitLabel)
+    </button>
+</div>
+
+@if (_message is not null)
+{
+    <Notice Severity="_message.Severity" Title="@_message.Title">
+        <Body>@_message.Body</Body>
+    </Notice>
+}
+
+@code {
+    [Parameter] public string SubmitLabel { get; set; } = "Save key";
+
+    /// <summary>
+    /// Raised after a key is stored. What happens next differs by screen —
+    /// onboarding starts the first sync and navigates away, settings stays —
+    /// so the form does not decide it.
+    /// </summary>
+    [Parameter] public EventCallback OnAccepted { get; set; }
+
+    private readonly CancellationTokenSource _cancellation = new();
+
+    private string _pasted = "";
+    private bool _busy;
+    private KeyMessage? _message;
+
+    private async Task Submit()
+    {
+        _busy = true;
+        _message = null;
+
+        KeySubmission result;
+
+        try
+        {
+            result = await Onboarding.SubmitKeyAsync(_pasted, _cancellation.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            // The component is going away. There is nothing left to draw on.
+            return;
+        }
+        finally
+        {
+            _busy = false;
+        }
+
+        _message = KeySubmissionMessage.For(result);
+
+        if (result == KeySubmission.Accepted)
+        {
+            _pasted = "";
+            await OnAccepted.InvokeAsync();
+        }
+    }
+
+    public void Dispose()
+    {
+        _cancellation.Cancel();
+        _cancellation.Dispose();
+    }
+}

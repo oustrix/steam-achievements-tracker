@@ -1,0 +1,45 @@
+<div class="row">
+    <input class="field num" type="text" autocomplete="off" spellcheck="false"
+           placeholder="76561190000000000 or a /profiles/ URL"
+           disabled="@Disabled"
+           @bind="_typed" @bind:event="oninput" />
+
+    <button class="secondary" type="button"
+            disabled="@(Disabled || _typed.Trim().Length == 0)" @onclick="Submit">
+        @ActionLabel
+    </button>
+</div>
+
+@if (_error is not null)
+{
+    <div class="error">@_error</div>
+}
+
+@code {
+    [Parameter] public string ActionLabel { get; set; } = "Use this account";
+
+    [Parameter] public bool Disabled { get; set; }
+
+    [Parameter, EditorRequired] public EventCallback<ulong> OnAccepted { get; set; }
+
+    // Names the restriction rather than saying "invalid": a user who pasted a
+    // vanity URL has not made a typo, and telling them so sends them looking
+    // for one.
+    private const string Invalid =
+        "Enter a 17-digit SteamID64, or the /profiles/ URL that contains one. Vanity links like /id/name are not supported.";
+
+    private string _typed = "";
+    private string? _error;
+
+    private async Task Submit()
+    {
+        if (!SteamId.TryParse(_typed, out var steamId))
+        {
+            _error = Invalid;
+            return;
+        }
+
+        _error = null;
+        await OnAccepted.InvokeAsync(steamId);
+    }
+}
