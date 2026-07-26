@@ -12,11 +12,15 @@ reality stops matching this file, fix the file.
 | `ISteamUserStats/GetSchemaForGame/v2` | yes | `appid`, `l` | achievement schema | 30 days |
 | `ISteamUserStats/GetPlayerAchievements/v1` | yes | `steamid`, `appid`, `l` | unlocks + `unlocktime` | driven by playtime |
 | `ISteamUserStats/GetGlobalAchievementPercentagesForApp/v2` | **no** | `gameid` | global rarity | 7 days |
-| `IPlayerService/GetRecentlyPlayedGames/v1` | yes | `steamid` | recently played | every sync |
+| `IPlayerService/GetRecentlyPlayedGames/v1` | yes | `steamid` | recently played | available, unused |
 | `/profiles/<id>/?xml=1` (community) | **no** | — | persona name, avatar | onboarding |
 | Image CDN | **no** | — | cover art, icons | forever |
 
 API base URL: `https://api.steampowered.com/`
+
+`GetRecentlyPlayedGames` is not called anywhere in the codebase: `GetOwnedGames`
+already returns `playtime_2weeks` and `rtime_last_played` for every game, which
+is the equivalent data this method would add.
 
 ### Parameter gotchas
 
