@@ -43,11 +43,9 @@
   </ItemGroup>
 
   <!--
-    A non-Web SDK does not treat wwwroot as content automatically, so the host
-    page would never reach the output directory.
+    wwwroot/index.html needs no <Content> entry: Microsoft.NET.Sdk.Razor
+    includes it by default. Adding one produces NETSDK1022 ("Duplicate 'Content'
+    items were included") rather than being harmlessly redundant.
   -->
-  <ItemGroup>
-    <Content Include="wwwroot\**\*" CopyToOutputDirectory="PreserveNewest" />
-  </ItemGroup>
 
 </Project>

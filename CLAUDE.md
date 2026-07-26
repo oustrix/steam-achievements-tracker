@@ -138,6 +138,11 @@ These cost real debugging time. Do not rediscover them.
   swallowed error.
 - **A `<Router>` with no `<NotFound>` renders nothing.** Not an error, not a
   message — a blank window. The WPF host's `Routes.razor` carries one.
+- **The WPF host uses `Microsoft.NET.Sdk.Razor`, not `Microsoft.NET.Sdk`.** It
+  compiles `.razor` files, which the plain SDK ignores, and `UseWPF` still
+  applies. It also includes `wwwroot/**` as content by default, so adding an
+  explicit `<Content Include="wwwroot\**\*" />` fails the build with NETSDK1022
+  instead of being harmlessly redundant.
 - **The sync seam lives in `Core/Presentation`, not in `UI/State`.** It was
   written in both places by two parallel branches. It has to be in Core: a seam
   declared in the UI project cannot be implemented there, which would strand the
