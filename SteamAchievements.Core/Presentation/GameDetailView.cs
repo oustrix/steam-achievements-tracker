@@ -6,27 +6,27 @@ namespace SteamAchievements.Core.Presentation;
 /// former.
 /// </summary>
 public sealed record AchievementRow(
-    string  Name,
-    string  Description,
-    string  IconUrl,
-    bool    Hidden,
+    string Name,
+    string Description,
+    string IconUrl,
+    bool Hidden,
     double? GlobalPercent,
-    string  PercentText,
-    int     RarityBarPercent,
-    string  CostText,
+    string PercentText,
+    int RarityBarPercent,
+    string CostText,
     string? UnlockedDateText);
 
 public sealed record GameDetailView(
-    uint   AppId,
+    uint AppId,
     string Name,
     string PlaytimeText,
     string LastPlayedText,
-    int    Unlocked,
-    int    Total,
-    int    CompletionPercent,
+    int Unlocked,
+    int Total,
+    int CompletionPercent,
     string EffortText,
     string EffortLabel,
-    int    Remaining,
+    int Remaining,
     string RarestText,
     IReadOnlyList<AchievementRow> RemainingAchievements,
     IReadOnlyList<AchievementRow> UnlockedAchievements);

@@ -7,18 +7,18 @@ namespace SteamAchievements.Core.Presentation;
 /// filter keystroke and is therefore computed by the screen, not here.
 /// </summary>
 public sealed record QueueRow(
-    uint   AppId,
+    uint AppId,
     string Name,
-    int    Unlocked,
-    int    Total,
-    int    CompletionPercent,
+    int Unlocked,
+    int Total,
+    int CompletionPercent,
     double Effort,
     string EffortText,
     string EffortLabel,
     string Reason,
-    int    PlaytimeHours,
-    bool   Complete,
-    bool   RarityUnknown);
+    int PlaytimeHours,
+    bool Complete,
+    bool RarityUnknown);
 
 /// <summary>
 /// <paramref name="TotalGames"/> counts the whole library, including games
@@ -28,7 +28,7 @@ public sealed record QueueRow(
 public sealed record QueueView(IReadOnlyList<QueueRow> Rows, int TotalGames);
 
 public sealed record LibrarySummary(
-    int    GameCount,
-    int    AchievementCount,
+    int GameCount,
+    int AchievementCount,
     string CountsText,
     string LastSyncText);
