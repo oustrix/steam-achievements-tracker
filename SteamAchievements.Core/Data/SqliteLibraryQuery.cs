@@ -127,11 +127,23 @@ public sealed class SqliteLibraryQuery : ILibraryQuery
                 Formatting.Timestamp(DateTimeOffset.Parse(r.StartedAt), now),
                 Describe(r),
                 Formatting.Duration(r.DurationMs),
-                r.Error is not null))
+                Outcome(r.Error)))
             .ToList();
+
+    private static SyncRunOutcome Outcome(string? error) => error switch
+    {
+        null => SyncRunOutcome.Completed,
+        SyncJournal.Cancelled => SyncRunOutcome.Cancelled,
+        _ => SyncRunOutcome.Failed,
+    };
 
     private static string Describe(SyncRunRow run)
     {
+        if (run.Error == SyncJournal.Cancelled)
+        {
+            return $"Cancelled — {Formatting.Number(run.GamesSynced)} games";
+        }
+
         if (run.Error is not null)
         {
             return $"Failed — {run.Error}";

@@ -81,7 +81,7 @@ public sealed class FixtureLibraryQuery : ILibraryQuery
                 _ => $"Schema refresh — {Formatting.Number(r.Item3)} games stale",
             },
             Formatting.Duration(r.Item4),
-            Failed: false))
+            SyncRunOutcome.Completed))
         .ToList();
     }
 }
