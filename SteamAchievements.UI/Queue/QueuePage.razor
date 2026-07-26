@@ -1,0 +1,12 @@
+@page "/"
+@inject ILibraryQuery Library
+@inject IClock Clock
+
+<h1>Completion queue</h1>
+<p class="num">@_queue.Rows.Count of @_queue.TotalGames games</p>
+
+@code {
+    private QueueView _queue = new([], 0);
+
+    protected override void OnInitialized() => _queue = Library.GetQueue(Clock.Now);
+}

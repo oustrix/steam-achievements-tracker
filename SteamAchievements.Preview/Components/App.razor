@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Steam Achievements Tracker — preview</title>
+    <base href="/" />
+    <link rel="stylesheet" href="_content/SteamAchievements.UI/app.css" />
+    @* Bundles every component's isolated CSS from the referenced RCL. *@
+    <link rel="stylesheet" href="SteamAchievements.Preview.styles.css" />
+    <HeadOutlet @rendermode="InteractiveServer" />
+</head>
+<body>
+    <Routes @rendermode="InteractiveServer" />
+    <script src="_framework/blazor.web.js"></script>
+    <script src="_content/SteamAchievements.UI/queue-scroll.js"></script>
+</body>
+</html>
