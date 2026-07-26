@@ -1,0 +1,15 @@
+.row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 16px;
+    padding: 13px 15px;
+    border: 1px solid var(--border-subtle);
+    border-radius: 9px;
+    background: var(--bg-card);
+}
+
+.text { display: flex; flex-direction: column; gap: 3px; }
+.name { font-size: 13px; }
+.note { font-size: 12px; color: var(--text-dim); }
+.value { font-size: 13px; color: var(--text-secondary); }

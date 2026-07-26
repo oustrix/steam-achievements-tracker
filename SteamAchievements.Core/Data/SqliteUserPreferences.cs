@@ -21,8 +21,15 @@ public sealed class SqliteUserPreferences : IUserPreferences
     public string? Accent =>
         _connection.QuerySingleOrDefault<string?>("SELECT accent FROM settings WHERE id = 1");
 
-    public void SetAccent(string accent) => _connection.Execute("""
-        INSERT INTO settings (id, accent) VALUES (1, @Accent)
-        ON CONFLICT(id) DO UPDATE SET accent = excluded.accent;
-        """, new { Accent = accent });
+    public event Action? Changed;
+
+    public void SetAccent(string accent)
+    {
+        _connection.Execute("""
+            INSERT INTO settings (id, accent) VALUES (1, @Accent)
+            ON CONFLICT(id) DO UPDATE SET accent = excluded.accent;
+            """, new { Accent = accent });
+
+        Changed?.Invoke();
+    }
 }

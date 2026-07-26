@@ -11,4 +11,12 @@ public interface IUserPreferences
     string? Accent { get; }
 
     void SetAccent(string accent);
+
+    /// <summary>
+    /// Raised after the accent changes. The shell renders the accent as a CSS
+    /// variable on its root, and a Blazor layout does not re-render when a page
+    /// inside it changes state — so without this the new colour would not
+    /// appear until the next navigation.
+    /// </summary>
+    event Action? Changed;
 }

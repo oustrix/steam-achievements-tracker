@@ -1,0 +1,25 @@
+<div class="picker">
+    @foreach (var (value, name) in Accents)
+    {
+        <button class="swatch @(Selected == value ? "on" : "")"
+                style="background: @value"
+                title="@name"
+                aria-label="@name"
+                @onclick="() => OnSelect.InvokeAsync(value)">
+        </button>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public string Selected { get; set; } = "";
+    [Parameter] public EventCallback<string> OnSelect { get; set; }
+
+    /// <summary>The four the mockup offers.</summary>
+    public static readonly (string Value, string Name)[] Accents =
+    [
+        ("#e0a355", "Amber"),
+        ("#8fb3c9", "Blue"),
+        ("#c98f7a", "Terracotta"),
+        ("#a8b58c", "Olive"),
+    ];
+}

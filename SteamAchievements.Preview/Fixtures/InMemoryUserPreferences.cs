@@ -7,5 +7,11 @@ public sealed class InMemoryUserPreferences : IUserPreferences
 {
     public string? Accent { get; private set; }
 
-    public void SetAccent(string accent) => Accent = accent;
+    public event Action? Changed;
+
+    public void SetAccent(string accent)
+    {
+        Accent = accent;
+        Changed?.Invoke();
+    }
 }

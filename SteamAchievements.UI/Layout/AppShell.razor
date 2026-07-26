@@ -26,11 +26,21 @@
     </main>
 </div>
 
+@implements IDisposable
+
 @code {
     /// <summary>Amber, matching the mockup's default.</summary>
     public const string DefaultAccent = "#e0a355";
 
     private LibrarySummary _summary = new(0, 0, "", "");
 
-    protected override void OnInitialized() => _summary = Library.GetSummary(Clock.Now);
+    protected override void OnInitialized()
+    {
+        _summary = Library.GetSummary(Clock.Now);
+        Preferences.Changed += HandlePreferencesChanged;
+    }
+
+    private void HandlePreferencesChanged() => StateHasChanged();
+
+    public void Dispose() => Preferences.Changed -= HandlePreferencesChanged;
 }
