@@ -1784,7 +1784,12 @@ public sealed class SqliteLibraryQuery : ILibraryQuery
         FROM owned_games o JOIN games g ON g.app_id = o.app_id
         """;
 
-    private const string ProgressSql = """
+    /// <summary>
+    /// One projection for both callers. The whole-library and single-game
+    /// reads differ only by a WHERE clause, and writing them out twice is how
+    /// a new column ends up added to one and forgotten in the other.
+    /// </summary>
+    private static string ProgressSql(bool singleGame) => $"""
         SELECT a.app_id        AS AppId,
                a.api_name      AS ApiName,
                a.display_name  AS DisplayName,
@@ -1797,13 +1802,14 @@ public sealed class SqliteLibraryQuery : ILibraryQuery
         FROM achievements a
         LEFT JOIN player_achievements p  ON p.app_id  = a.app_id AND p.api_name  = a.api_name
         LEFT JOIN global_percents     gp ON gp.app_id = a.app_id AND gp.api_name = a.api_name
+        {(singleGame ? "WHERE a.app_id = @AppId" : "")}
         ORDER BY a.app_id, a.sort_order
         """;
 
     public QueueView GetQueue(DateTimeOffset now)
     {
         var games = _connection.Query<GameRow>(GamesSql).ToList();
-        var progress = _connection.Query<ProgressRow>(ProgressSql)
+        var progress = _connection.Query<ProgressRow>(ProgressSql(singleGame: false))
             .GroupBy(r => r.AppId)
             .ToDictionary(g => g.Key, g => g.Select(Project).ToList());
 
@@ -1827,22 +1833,8 @@ public sealed class SqliteLibraryQuery : ILibraryQuery
             return null;
         }
 
-        var achievements = _connection.Query<ProgressRow>("""
-            SELECT a.app_id        AS AppId,
-                   a.api_name      AS ApiName,
-                   a.display_name  AS DisplayName,
-                   a.description   AS Description,
-                   a.icon_url      AS IconUrl,
-                   a.is_hidden     AS IsHidden,
-                   p.unlocked      AS Unlocked,
-                   p.unlocked_at   AS UnlockedAt,
-                   gp.percent      AS Percent
-            FROM achievements a
-            LEFT JOIN player_achievements p  ON p.app_id  = a.app_id AND p.api_name  = a.api_name
-            LEFT JOIN global_percents     gp ON gp.app_id = a.app_id AND gp.api_name = a.api_name
-            WHERE a.app_id = @AppId
-            ORDER BY a.sort_order
-            """, new { AppId = appId })
+        var achievements = _connection
+            .Query<ProgressRow>(ProgressSql(singleGame: true), new { AppId = appId })
             .Select(Project)
             .ToList();
 
@@ -5000,9 +4992,12 @@ Create `SteamAchievements.UI/Onboarding/OnboardingPage.razor`:
 
         <div class="account">
             <div class="avatar"></div>
+            @* Placeholder values. The mockup shows a real account here; a real
+               SteamID64 must never be committed (CLAUDE.md), and these are
+               replaced by ISteamPathProvider in the Windows spec anyway. *@
             <div class="who">
-                <span class="name">oustrix</span>
-                <span class="num id">76561198024361592</span>
+                <span class="name">Your Steam account</span>
+                <span class="num id">76561190000000000</span>
             </div>
             <span class="spacer"></span>
             <button class="primary" disabled>Yes, continue</button>
@@ -5043,7 +5038,7 @@ Create `SteamAchievements.UI/Onboarding/OnboardingPage.razor`:
 </div>
 ```
 
-The account name and SteamID64 shown here are the mockup's placeholder values. They stay hard-coded until the Windows spec supplies `ISteamPathProvider` and the profile lookup; the shape of the screen is what is being settled now.
+The account name and SteamID64 shown here are deliberately fake. The mockup shows a real-looking account, and `CLAUDE.md` forbids committing real `steamid` values — so the screen carries an obviously-invalid placeholder until the Windows spec supplies `ISteamPathProvider` and the profile lookup. The shape of the screen is what is being settled now.
 
 Create `SteamAchievements.UI/Onboarding/OnboardingPage.razor.css`:
 
