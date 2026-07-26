@@ -640,3 +640,24 @@ and code signing.
   queue shows twelve rows in a different order from the mockup, with reasons
   in `ReasonWriter`'s format rather than the mockup's sample prose. The
   mockup is the source of truth for layout and tone, not for data.
+
+## 16. Open question inherited from `main`
+
+While these screens were being built, `main` split the CLI's ranking report in
+two — "finish what you started" (at least one achievement unlocked, at least
+one remaining) and "start new" (nothing unlocked yet). The reason was
+measured, not aesthetic: on a real library, thirteen of the top twenty games
+in the single ranked list had no progress at all, burying the games actually
+close to completion. See `docs/ranking.md`.
+
+The completion queue built here is one list, because the mockup shows one and
+this spec was written from the mockup. Both are now true in the same
+repository: the CLI ranks in two lists, the UI ranks in one.
+
+This is a product decision rather than a defect, and it is deliberately left
+open. Whoever picks it up should decide whether the queue screen gains the
+same split, gains a filter that expresses it, or stays a single list on the
+grounds that the sort and the "min. playtime" filter already let someone find
+either group. Nothing in the code assumes an answer: `QueueFilter` sorts and
+filters a flat list, and a second grouping would sit above it rather than
+inside it.
