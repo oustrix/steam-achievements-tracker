@@ -15,6 +15,7 @@ builder.Services.AddScoped<ILibraryQuery>(s => s.GetRequiredService<FixtureLibra
 builder.Services.AddScoped<IUserPreferences, InMemoryUserPreferences>();
 
 builder.Services.AddScoped<QueueState>();
+builder.Services.AddScoped<ISyncPresenter, FixtureSyncPresenter>();
 
 // Frozen so the preview reads identically on every run.
 builder.Services.AddScoped<IClock>(_ => new FixedClock(FixtureData.Now));

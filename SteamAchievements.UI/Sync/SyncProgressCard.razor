@@ -1,0 +1,41 @@
+<div class="card">
+    <div class="head">
+        <span class="title">@Title</span>
+        @if (Status.Total > 0)
+        {
+            <span class="num counter">
+                @Formatting.Number(Status.Completed) / @Formatting.Number(Status.Total)
+            </span>
+        }
+    </div>
+
+    <ProgressBar Percent="Status.Percent" Height="6" />
+
+    <div class="detail num">
+        <span>@(Status.CurrentGame.Length == 0 ? "idle" : $"now: {Status.CurrentGame}")</span>
+        <span>@Status.EtaText@(Status.RateText.Length == 0 ? "" : $" · {Status.RateText}")</span>
+    </div>
+
+    <div class="actions">
+        <button class="primary" disabled="@Disabled">
+            @(Status.Phase == SyncPhase.Paused ? "Resume" : "Pause")
+        </button>
+        <button class="ghost" disabled="@Disabled">Cancel</button>
+        <span class="spacer"></span>
+        <span class="note">Progress is saved — closing the app is safe</span>
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public SyncStatusView Status { get; set; } = default!;
+
+    private bool Disabled => Status.Phase == SyncPhase.Idle;
+
+    private string Title => Status.Phase switch
+    {
+        SyncPhase.Running => "Full sync in progress",
+        SyncPhase.Paused => "Sync paused",
+        SyncPhase.CircuitOpen => "Sync waiting to retry",
+        _ => "No sync running",
+    };
+}

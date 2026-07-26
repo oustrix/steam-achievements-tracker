@@ -1,0 +1,31 @@
+@using Microsoft.AspNetCore.WebUtilities
+@using SteamAchievements.Preview.Fixtures
+@implements IDisposable
+@inject FixtureLibraryQuery Library
+@inject NavigationManager Navigation
+
+@ChildContent
+
+@code {
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    protected override void OnInitialized()
+    {
+        Navigation.LocationChanged += OnLocationChanged;
+        Apply();
+    }
+
+    public void Dispose() => Navigation.LocationChanged -= OnLocationChanged;
+
+    private void OnLocationChanged(object? sender, LocationChangedEventArgs e) => Apply();
+
+    private void Apply()
+    {
+        var query = QueryHelpers.ParseQuery(new Uri(Navigation.Uri).Query);
+
+        Library.Scenario = query.TryGetValue("scenario", out var value)
+            && Enum.TryParse<Scenario>(value.ToString().Replace("-", ""), ignoreCase: true, out var scenario)
+                ? scenario
+                : Scenario.Normal;
+    }
+}

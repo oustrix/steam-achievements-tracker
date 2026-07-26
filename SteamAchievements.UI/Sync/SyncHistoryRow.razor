@@ -1,0 +1,9 @@
+<div class="row">
+    <span class="num when">@Run.WhenText</span>
+    <span class="what @(Run.Failed ? "failed" : "")">@Run.WhatText</span>
+    <span class="num dur">@Run.DurationText</span>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public SyncRunView Run { get; set; } = default!;
+}

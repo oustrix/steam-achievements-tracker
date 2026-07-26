@@ -1,0 +1,75 @@
+@page "/sync"
+@inject ILibraryQuery Library
+@inject IClock Clock
+@inject ISyncPresenter Sync
+@inject NavigationManager Navigation
+
+<PageTitle>Sync</PageTitle>
+
+<div class="page">
+    <div class="intro">
+        <h1>Sync</h1>
+        <p>Steam allows about five requests per second. Games whose playtime has not
+           changed are skipped entirely.</p>
+    </div>
+
+    <SyncProgressCard Status="_status" />
+
+    @if (_status.AlertTitle is not null)
+    {
+        <Notice Severity="NoticeSeverity.Warning" Title="@_status.AlertTitle"
+                ActionLabel="Retry now">
+            <Body>@_status.AlertBody</Body>
+        </Notice>
+    }
+
+    @if (_summary.GameCount == 0)
+    {
+        <Notice Severity="NoticeSeverity.Danger"
+                Title="Steam rejected the API key"
+                ActionLabel="Open settings"
+                OnAction="OpenSettings">
+            <Body>
+                HTTP 401. The key was revoked or mistyped — retrying will not help.
+                Replace it in Settings.
+            </Body>
+        </Notice>
+
+        <Notice Severity="NoticeSeverity.Warning" Title="Your game details are private">
+            <Body>
+                Steam returns an empty library even to you until
+                <strong>Game details</strong> is set to Public in your privacy settings.
+            </Body>
+        </Notice>
+    }
+
+    <div class="history">
+        <div class="micro">History</div>
+        @if (_history.Count == 0)
+        {
+            <p class="empty">No syncs recorded yet.</p>
+        }
+        else
+        {
+            @foreach (var run in _history)
+            {
+                <SyncHistoryRow Run="run" />
+            }
+        }
+    </div>
+</div>
+
+@code {
+    private SyncStatusView _status = SyncStatusView.Idle;
+    private LibrarySummary _summary = new(0, 0, "", "");
+    private IReadOnlyList<SyncRunView> _history = [];
+
+    protected override void OnInitialized()
+    {
+        _status = Sync.Status;
+        _summary = Library.GetSummary(Clock.Now);
+        _history = Library.GetSyncHistory(20, Clock.Now);
+    }
+
+    private void OpenSettings() => Navigation.NavigateTo("settings");
+}

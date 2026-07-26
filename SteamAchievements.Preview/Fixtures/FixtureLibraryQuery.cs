@@ -25,7 +25,22 @@ public sealed class FixtureLibraryQuery : ILibraryQuery
     private IReadOnlyList<FixtureGame> Source => Scenario switch
     {
         Scenario.Empty or Scenario.PrivateProfile or Scenario.InvalidKey => [],
-        Scenario.RarityUnknown => FixtureData.All.Where(g => g.Game.AppId == 435150).ToList(),
+
+        // Divinity with its rarity stripped entirely. Taking the game as-is
+        // would NOT reach this state: EffortCalculator reports RarityUnknown
+        // only when every achievement lacks a percentage, and Divinity has one
+        // for 33 of its 39 locked achievements. Without this the scenario
+        // would promise a state it never shows.
+        Scenario.RarityUnknown => FixtureData.All
+            .Where(g => g.Game.AppId == 435150)
+            .Select(g => g with
+            {
+                Achievements = g.Achievements
+                    .Select(a => a with { GlobalPercent = (double?)null })
+                    .ToList(),
+            })
+            .ToList(),
+
         _ => FixtureData.All,
     };
 
