@@ -37,8 +37,17 @@ public sealed class FixtureOnboarding : IOnboarding
     /// time, and ?scenario=first-run would silently do nothing.
     /// </summary>
     public OnboardingStep Step => OnboardingState.Evaluate(
-        _chosen ?? (_library.Scenario == Scenario.FirstRun ? null : FixtureSteamId),
+        ChosenAccount,
         _keyStored ?? _library.Scenario != Scenario.FirstRun);
+
+    /// <summary>
+    /// The fixture's own notion of "an account is chosen" — the same expression
+    /// <see cref="Step"/> uses. Shared so <see cref="SubmitKeyAsync"/> enforces
+    /// the same ordering contract <see cref="IOnboarding.SubmitKeyAsync"/>
+    /// documents: only <c>?scenario=first-run</c>, before an account has been
+    /// chosen, has no account here.
+    /// </summary>
+    private ulong? ChosenAccount => _chosen ?? (_library.Scenario == Scenario.FirstRun ? null : FixtureSteamId);
 
     public IReadOnlyList<SteamAccount> DiscoveredAccounts =>
     [
@@ -57,6 +66,11 @@ public sealed class FixtureOnboarding : IOnboarding
 
     public async Task<KeySubmission> SubmitKeyAsync(string pasted, CancellationToken cancellationToken)
     {
+        if (ChosenAccount is null)
+        {
+            throw new InvalidOperationException("An account must be chosen before a key can be checked.");
+        }
+
         // Long enough to see the controls disabled, short enough not to be a
         // wait. The preview is read as much as it is clicked.
         await Task.Delay(400, cancellationToken);
