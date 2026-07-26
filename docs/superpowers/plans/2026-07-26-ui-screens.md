@@ -5024,8 +5024,12 @@ one source of truth, announced.
 
 - [ ] **Step 5: Commit**
 
+Step 4 changes the seam itself, so the commit spans three projects: without
+`IUserPreferences` and both implementations, the `AppShell` in this commit does
+not compile.
+
 ```bash
-git add -A SteamAchievements.UI
+git add -A SteamAchievements.UI SteamAchievements.Core SteamAchievements.Preview
 git commit -m "feat: build the settings screen with a working accent picker"
 ```
 
