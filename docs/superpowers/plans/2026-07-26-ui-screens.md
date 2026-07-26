@@ -3358,8 +3358,10 @@ Create `SteamAchievements.UI/Queue/QueueToolbar.razor`:
                    @oninput="e => State.SetQuery(e.Value?.ToString() ?? string.Empty)" />
         </div>
 
-        <select class="playtime" value="@State.Criteria.MinPlaytimeHours"
-                @onchange="e => State.SetMinPlaytime(int.Parse(e.Value?.ToString() ?? "0"))">
+        @* The handler is a method, not a lambda: a lambda here would need a
+           string literal inside a double-quoted Razor attribute, which does
+           not parse. *@
+        <select class="playtime" value="@State.Criteria.MinPlaytimeHours" @onchange="OnPlaytimeChanged">
             <option value="0">Min. playtime: any</option>
             <option value="1">Min. playtime: 1 h</option>
             <option value="5">Min. playtime: 5 h</option>
@@ -3392,6 +3394,9 @@ Create `SteamAchievements.UI/Queue/QueueToolbar.razor`:
 
     private string Arrow(QueueSort sort) =>
         State.Criteria.Sort != sort ? "" : State.Criteria.Descending ? "↓" : "↑";
+
+    private void OnPlaytimeChanged(ChangeEventArgs e) =>
+        State.SetMinPlaytime(int.TryParse(e.Value?.ToString(), out var hours) ? hours : 0);
 }
 ```
 
@@ -3682,7 +3687,9 @@ Create `SteamAchievements.UI/Queue/QueuePage.razor.css`:
 Run: `dotnet run --project SteamAchievements.Preview` and open `http://localhost:5100`.
 
 Expected:
-- Thirteen rows (Celeste and Portal 2 hidden by the default "100 % complete: hidden"), Hollow Knight first with effort `4.2` and the line "1 left: one rare (2.1%)".
+- Twelve rows: fourteen fixture games less Celeste and Portal 2, hidden by the default "100 % complete: hidden".
+- Rows ascending by effort, least work first.
+- Hollow Knight reads `3 left, two below 5% of owners`. Note this is NOT the mockup's hand-written line for that game ("3 left: two common, one rare (2.1%)"). Its three locked achievements sit at 9.8%, 4.6% and 2.1%, and the agreed threshold makes a 4.6% achievement rare, so two of the three are. The mockup's own prose implies a threshold nearer 3% in that line while writing the phrase "below 5% of owners" in another — it is inconsistent, and the single rule wins. See spec section 5.2.
 - Real cover art for every game.
 - Clicking "Effort" flips the arrow to ↓ and puts Europa Universalis IV first.
 - Typing "knight" leaves one row; clearing it restores thirteen.
