@@ -137,6 +137,53 @@ public static class Database
     }
 
     /// <summary>
+    /// Empties the library so a different Steam account can be synced into it,
+    /// or so a broken cache can be rebuilt. These are the same operation: no
+    /// table carries a SteamID column, so the database implicitly belongs to one
+    /// account and mixing two produces silently wrong data with nothing in the
+    /// schema to tell them apart afterwards.
+    ///
+    /// Deletes rows rather than the file. Three connections are open against it
+    /// and Windows does not delete open files; tearing the whole connection graph
+    /// down and rebuilding it would be far more code than this.
+    ///
+    /// Keeps <c>settings.accent</c>. That is the user's taste rather than the
+    /// account's data, and losing it on "switch account" is a surprise beyond
+    /// what the confirmation promised.
+    /// </summary>
+    public static void ResetLibrary(SqliteConnection connection)
+    {
+        using (var transaction = connection.BeginTransaction())
+        {
+            connection.Execute("""
+                DELETE FROM player_achievements;
+                DELETE FROM global_percents;
+                DELETE FROM achievements;
+                DELETE FROM sync_state;
+                DELETE FROM owned_games;
+                DELETE FROM games;
+                DELETE FROM snapshots;
+                DELETE FROM sync_runs;
+
+                UPDATE settings
+                   SET steam_id64        = NULL,
+                       persona_name      = NULL,
+                       avatar_url        = NULL,
+                       last_full_sync_at = NULL,
+                       key_rejected_at   = NULL
+                 WHERE id = 1;
+                """, transaction: transaction);
+
+            transaction.Commit();
+        }
+
+        // VACUUM cannot run inside a transaction, so it is deliberately outside
+        // the block above. Without it the file keeps the space the deleted rows
+        // occupied, which for a 1500-game library is most of it.
+        connection.Execute("VACUUM");
+    }
+
+    /// <summary>
     /// Idempotent ALTER TABLE. SQLite has no "ADD COLUMN IF NOT EXISTS", and
     /// running the same ALTER twice throws "duplicate column name", so the
     /// current shape is inspected first.
