@@ -30,7 +30,14 @@ public sealed class SyncOrchestrator
     // run in parallel across workers.
     private readonly Lock _dbLock = new();
 
-    public SyncOrchestrator(SteamApiClient client, GameRepository repository, SyncOptions options)
+    /// <summary>
+    /// The production retry base delay: 1s, 2s, 4s, 8s under exponential
+    /// backoff. Tests inject a much smaller value via <paramref name="retryBaseDelay"/>
+    /// so a retry-exercising test runs in milliseconds instead of real seconds
+    /// — the backoff shape (exponential, 4 attempts) stays identical either way.
+    /// </summary>
+    public SyncOrchestrator(
+        SteamApiClient client, GameRepository repository, SyncOptions options, TimeSpan? retryBaseDelay = null)
     {
         _client = client;
         _repository = repository;
@@ -45,7 +52,7 @@ public sealed class SyncOrchestrator
                     .Handle<SteamApiException>(e => e.IsTransient),
                 MaxRetryAttempts = 4,
                 BackoffType = DelayBackoffType.Exponential,
-                Delay = TimeSpan.FromSeconds(1),
+                Delay = retryBaseDelay ?? TimeSpan.FromSeconds(1),
             })
             .AddCircuitBreaker(new CircuitBreakerStrategyOptions
             {
