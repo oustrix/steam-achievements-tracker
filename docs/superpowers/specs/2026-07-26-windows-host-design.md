@@ -316,6 +316,20 @@ an invitation to put something else in it.
 - Migration: one more `EnsureColumn(connection, "settings", "key_rejected_at",
   "TEXT")`. The mechanism exists and is already proven on `accent`.
 
+**`SyncRunView` has to change.** It currently carries `bool Failed`, and
+`SqliteLibraryQuery.Describe` renders any non-null `error` as
+`"Failed — {error}"`. Under §3.2 a cancelled run stores `cancelled` in that
+column, so the history screen would report every pause as a failure — the
+opposite of what §3.2 argues the column is for. `bool Failed` becomes
+
+```csharp
+public enum SyncRunOutcome { Completed, Cancelled, Failed }
+```
+
+and `Describe` grows a cancelled branch rendering `"Cancelled — 412 games"`.
+Nothing consumes `Failed` yet, so this is free today and only gets more
+expensive.
+
 There is one reset operation, not two. "Switch account" and "reset the
 database" are identical as far as the schema is concerned; the difference
 lives in the host's composition, where it is visible:
@@ -341,6 +355,23 @@ semantics and no key. It does not belong next to `GetJsonAsync<T>`.
 **This call never blocks onboarding.** No answer, an HTML body, a redirect to
 `/login` — the "is this you?" step shows the SteamID without an avatar and
 lets the user continue. The name and the picture are decoration, not data.
+
+Verified live on 2026-07-26 rather than recalled, because the shape decides
+the parser:
+
+- A profile answers `<profile>` with `<steamID64>`, `<steamID>` (the persona
+  name), `<avatarFull>` and more. Every text field is wrapped in `CDATA`.
+- A profile whose `privacyState` is `friendsonly` still returns the name and
+  the avatar. Privacy does not have to be handled as a failure.
+- **A non-existent profile answers HTTP 200** with
+  `<response><error>The specified profile could not be found.</error></response>`.
+  The status code is therefore useless; the parser must branch on the root
+  element being `profile`.
+- `/games?tab=all&xml=1` still redirects anonymous callers to `/login` with a
+  302, so `docs/steam-api.md` remains accurate on that point.
+
+These facts belong in `docs/steam-api.md`, which is the authoritative record;
+the plan adds them there.
 
 The test fixture is recorded live and anonymized before committing, per the
 repository rule on `steamid` and `key`.
@@ -595,6 +626,8 @@ What this design requires from the UI branch:
 - `SyncStatusCard` taking `SyncStatusView` rather than only `LibrarySummary`.
   It currently renders two strings out of the summary; §3.5 requires it to
   show a rejected key, which the summary cannot express.
+- the history screen reading `SyncRunView.Outcome` instead of the `bool Failed`
+  it replaces (§4.3).
 
 Note that as of `worktree-design-ui` at 99bc25b the UI branch has one screen,
 not six: `Queue/QueuePage.razor` on `/`, plus `AppShell`, `SyncStatusCard`,
