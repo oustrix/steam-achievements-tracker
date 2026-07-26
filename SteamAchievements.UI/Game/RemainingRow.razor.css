@@ -1,0 +1,30 @@
+.row {
+    display: grid;
+    grid-template-columns: 48px 1fr 110px 74px;
+    gap: 16px;
+    align-items: center;
+    padding: 12px 14px;
+    border: 1px solid var(--border-subtle);
+    border-radius: 9px;
+    background: var(--bg-card);
+}
+
+.icon-slot { height: 48px; }
+.text { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.name { font-size: 14px; font-weight: 600; }
+.name.hidden { color: var(--text-faded); }
+
+.desc {
+    font-size: 12px;
+    color: var(--text-muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.rarity { display: flex; flex-direction: column; gap: 5px; }
+.pct { font-size: 12px; color: var(--text-secondary); }
+
+.cost { display: flex; flex-direction: column; gap: 3px; text-align: right; }
+.cost .value { font-size: 14px; color: var(--accent); }
+.cost .micro { text-align: right; }

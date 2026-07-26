@@ -1,0 +1,95 @@
+@page "/game/{AppId:int}"
+@inject ILibraryQuery Library
+@inject IClock Clock
+@inject NavigationManager Navigation
+
+@if (_game is null)
+{
+    <div class="missing">
+        <EmptyState Title="That game is not in your library"
+                    Body="It may have been removed from your account, or the link is stale." />
+    </div>
+}
+else
+{
+    <PageTitle>@_game.Name</PageTitle>
+
+    <GameHeader AppId="_game.AppId" OnBack="Back" />
+
+    <div class="body">
+        <div class="summary">
+            <div class="titles">
+                <h1>@_game.Name</h1>
+                <div class="meta">@_game.PlaytimeText played · last played @_game.LastPlayedText</div>
+                <ProgressBar Percent="_game.CompletionPercent" Height="4" MaxWidth="460px" />
+                <div class="num progress">
+                    @_game.Unlocked of @_game.Total unlocked · @_game.CompletionPercent%
+                </div>
+            </div>
+
+            <div class="stats">
+                <StatCard Value="@_game.EffortText" Label="remaining effort"
+                          Note="@_game.EffortLabel" ValueColor="var(--accent)" />
+                <StatCard Value="@_game.Remaining.ToString()" Label="left"
+                          Note="@($"rarest {_game.RarestText}")" />
+            </div>
+        </div>
+
+        @if (_game.RarestText == "unknown" && _game.Remaining > 0)
+        {
+            <Notice Title="Rarity data unavailable">
+                <Body>
+                    Steam has no global percentages for this game yet, so every remaining
+                    achievement counts as one unit and rarity reads
+                    <span class="num">unknown</span> — not zero.
+                </Body>
+            </Notice>
+        }
+
+        <section>
+            <div class="section-head">
+                <h2>Remaining</h2>
+                <span class="num hint">cheapest first</span>
+            </div>
+            @if (_game.RemainingAchievements.Count == 0)
+            {
+                <EmptyState Title="Nothing left here"
+                            Body="Every achievement in this game is unlocked." />
+            }
+            else
+            {
+                <div class="rows">
+                    @foreach (var row in _game.RemainingAchievements)
+                    {
+                        <RemainingRow Row="row" />
+                    }
+                </div>
+            }
+        </section>
+
+        <section>
+            <div class="section-head">
+                <h2>Unlocked</h2>
+                <span class="num hint">most recent first</span>
+            </div>
+            <div>
+                @foreach (var row in _game.UnlockedAchievements)
+                {
+                    <UnlockedRow Row="row" />
+                }
+            </div>
+        </section>
+    </div>
+}
+
+@code {
+    [Parameter] public int AppId { get; set; }
+
+    private GameDetailView? _game;
+
+    // Re-read on every parameter change, not just on initialization: clicking
+    // another game while already on this route reuses the component instance.
+    protected override void OnParametersSet() => _game = Library.GetGame((uint)AppId, Clock.Now);
+
+    private void Back() => Navigation.NavigateTo("/");
+}

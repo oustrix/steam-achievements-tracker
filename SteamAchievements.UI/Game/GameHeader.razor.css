@@ -1,0 +1,26 @@
+.banner {
+    position: relative;
+    height: 230px;
+    /* The hatch shows through when header.jpg is missing, which is the same
+       placeholder the queue covers fall back to. */
+    background-color: #1d1b22;
+    background-image: repeating-linear-gradient(135deg, #232028 0 10px, #1d1b22 10px 20px);
+    background-size: cover;
+    background-position: center;
+}
+
+.back {
+    position: absolute;
+    top: 18px;
+    left: 24px;
+    font: inherit;
+    font-size: 12px;
+    padding: 7px 12px;
+    border-radius: 7px;
+    border: 1px solid var(--border-strong);
+    background: rgba(20, 19, 23, 0.6);
+    color: var(--text-secondary);
+    cursor: pointer;
+}
+
+.back:hover { color: var(--text); border-color: var(--border-hover); }

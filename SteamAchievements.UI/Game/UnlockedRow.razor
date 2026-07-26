@@ -1,0 +1,12 @@
+<div class="row">
+    <div class="icon-slot">
+        <CoverImage Url="@Row.IconUrl" FallbackLabel="" />
+    </div>
+    <span class="name">@Row.Name</span>
+    <span class="num pct">@(Row.GlobalPercent is { } p ? Formatting.Percent(p) : "—")</span>
+    <span class="num date">@Row.UnlockedDateText</span>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public AchievementRow Row { get; set; } = default!;
+}
