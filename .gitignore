@@ -32,3 +32,6 @@ appsettings.Local.json
 
 ## Fixtures must be anonymized before committing; raw captures stay local
 testdata/**/*.raw.json
+
+## Claude Code worktrees — local scratch, never committed
+.claude/worktrees/

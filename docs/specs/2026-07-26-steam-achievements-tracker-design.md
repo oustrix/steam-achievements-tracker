@@ -182,18 +182,28 @@ Response handling and error codes live in `docs/steam-api.md`.
 ## 8. Ranking formula
 
 ```
-relative(a)  = percent(a) / max(percent across this game's achievements)
-cost(a)      = -log2( max(relative(a), 0.001) )
+relative(a)  = clamp( percent(a) / max(percent across this game's achievements) )
+absolute(a)  = clamp( percent(a) / 100 )
+cost(a)      = -log2(relative(a))  +  0.5 * -log2(absolute(a))
 effort(game) = Σ cost(a) over locked achievements
 ```
+
+where `clamp(x) = min(max(x, 0.001), 1)` keeps both ratios in `(0.001, 1]` so
+the logarithm never sees 0.
 
 Games are sorted by ascending `effort`.
 
 Normalizing against the game's own maximum removes the "bought but never
 launched" distortion: global percentages are computed across all owners,
 including those who never started the game, which makes raw percentages
-incomparable between titles. After normalization a game's most common
-achievement costs 0, and cost grows logarithmically — half as common adds one.
+incomparable between titles. The relative term alone gives a game's most
+common achievement cost 0, and grows logarithmically — half as common (within
+the game) adds one.
+
+The absolute term is a second, half-weighted cost computed against a fixed
+100% ceiling instead of the game's own maximum. It exists specifically to
+handle the case in 8.2 below, where the relative term alone gives a wrong
+answer. See 8.2 for why it is there before considering removing it.
 
 Mandatory implementation details:
 
@@ -234,13 +244,66 @@ not "this is impossible". That interpretation survives the objection.
 The right way to surface genuine unobtainability is curated per-achievement
 information, not inference from statistics — see 10.2.
 
+### 8.2 Why relative rarity alone is not enough (decided 2026-07-26)
+
+The first version of this formula used only the relative term. Running it
+against a real 396-game library exposed a defect in the design, not the
+implementation: normalizing purely against a game's own maximum collapses
+when a game's achievements are all similarly rare, because a narrow spread of
+percentages is itself evidence that almost nobody played the game — not
+evidence that it is easy.
+
+Observed on the live library:
+
+- **Overture** — 4 achievements, global rarity 2.1%-2.2%. Every achievement
+  was ~1.0 relative to the game's own maximum, so total effort came out to
+  0.07: ranked **#1 easiest** across 396 games.
+- **Rust - Staging Branch** — 6 achievements, 3.7%-3.8%, effort 0.15, ranked
+  #2.
+- **Schedule I** — 13 achievements spanning 5.6%-95.9%, already 10/13
+  unlocked (77% complete), effort 11.02, ranked #14.
+
+A game nobody has played, whose every achievement is held by only 2% of
+owners, outranked a game the user had already taken to 77% completion. Pure
+relative normalization cannot distinguish "this achievement is common because
+the game is easy" from "this achievement is uncommon like everything else in
+this barely-touched game" — both look like "average for this game" once
+divided by the in-game maximum.
+
+The absolute term (weighted at 0.5, see the `AbsoluteRarityWeight` constant
+in `EffortCalculator`) fixes this without discarding the relative term's
+value: it charges every achievement for how rare it is *globally*, so a
+uniformly-rare game can no longer look free just because nothing in its own
+narrow band stands out. Half weight keeps the relative term dominant — it is
+still what makes costs comparable across games of different sizes and
+audiences — while being enough to push Overture and Rust far down the
+ranking. **Do not simplify this back to pure relative normalization**; that
+regresses exactly the defect above.
+
 ## 9. Screens
 
-**Completion queue (main screen).** A virtualized list of cards: cover art
-(`library_600x900.jpg`), title, progress (`37 of 44`), remaining effort, and —
-crucially — a "why it is here" line such as *"3 left: two common, one rare
-(2.1%)"*. Without that explanation any recommendation list reads as guesswork.
-Filters: minimum playtime, title search.
+**Two ranked lists, not one.** The main screen's "what should I complete
+next" question and "what should I start" question are different questions
+with different answers, so they get separate lists rather than one queue with
+a filter flag or a progress multiplier. On the live 396-game library, 13 of
+the top 20 games by the old single-queue ranking had 0% progress — those were
+suggestions to *start* a game, not to *finish* one, and drowned out the games
+that were actually close to done.
+
+- **Finish what you started** (primary list, shown first) — games with at
+  least one unlocked achievement and at least one remaining, ascending by
+  remaining effort.
+- **Start something new** — games with zero unlocked achievements, same
+  sorting.
+
+Fully completed games (nothing remaining) appear in neither list; they are
+counted in the summary instead.
+
+Each list is a virtualized list of cards: cover art (`library_600x900.jpg`),
+title, progress (`37 of 44`), remaining effort, and — crucially — a "why it is
+here" line such as *"3 left: two common, one rare (2.1%)"*. Without that
+explanation any recommendation list reads as guesswork. Filters: minimum
+playtime, title search.
 
 Rarity is shown as a number, not as a verdict. The user sees "one rare (2.1%)"
 and draws their own conclusion; the app does not tell them whether that is

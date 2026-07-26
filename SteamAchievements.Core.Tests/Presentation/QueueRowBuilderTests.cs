@@ -92,8 +92,14 @@ public class QueueRowBuilderTests
     {
         var row = QueueRowBuilder.Build(Game(), [Unlocked(80), Locked(20), Locked(20)]);
 
-        // Two locked at 20% against a 80% maximum: -log2(0.25) = 2 each.
-        Assert.Equal("4", row.EffortText);
+        // How large the number is belongs to EffortCalculator and is tested
+        // there. What this pins is the rendering, which is this builder's job:
+        // at most one decimal place, and no trailing ".0" on a whole number.
+        // Asserting a literal total here instead made this test fail the first
+        // time the cost formula was tuned, reporting a formatting defect that
+        // did not exist.
+        Assert.Matches(@"^\d+(\.\d)?$", row.EffortText);
+        Assert.DoesNotContain(".0", row.EffortText);
     }
 
     [Fact]
