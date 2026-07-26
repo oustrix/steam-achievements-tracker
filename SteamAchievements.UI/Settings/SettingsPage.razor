@@ -1,8 +1,13 @@
 @page "/settings"
 @using SteamAchievements.Core.Sync
+@using Microsoft.Data.Sqlite
+@implements IDisposable
 @inject IUserPreferences Preferences
 @inject ILibraryQuery Library
 @inject IClock Clock
+@inject IAccountAdmin Accounts
+@inject IOnboarding Onboarding
+@inject LibraryChangeSignal LibraryChanged
 
 <PageTitle>Settings</PageTitle>
 
@@ -10,21 +15,76 @@
     <h1>Settings</h1>
 
     <div class="account">
-        <div class="avatar"></div>
+        @* Not CoverImage: that component is sized by its parent's .cover rule
+           and carries a game-cover placeholder. The .avatar rule already in
+           this stylesheet is what the mockup wants here. *@
+        @if (_row.AvatarUrl is null)
+        {
+            <div class="avatar"></div>
+        }
+        else
+        {
+            <img class="avatar" src="@_row.AvatarUrl" alt="" />
+        }
         <div class="who">
-            <span class="name">Not signed in yet</span>
-            <span class="num id">Detected from loginusers.vdf during onboarding</span>
+            <span class="name">@_row.Name</span>
+            <span class="num id">@_row.Detail</span>
         </div>
         <span class="spacer"></span>
-        <button class="secondary" disabled>Change account</button>
+        @if (_pending != Pending.Switch)
+        {
+            <button class="secondary" type="button" @onclick="() => _pending = Pending.Switch">
+                Change account
+            </button>
+        }
     </div>
+
+    @if (_row.SwitchPrompt is not null && _pending != Pending.Switch)
+    {
+        <Notice Severity="NoticeSeverity.Info" Title="@_row.SwitchPrompt"
+                ActionLabel="Switch to it" OnAction="() => _pending = Pending.Switch">
+            <Body>
+                Cached data belongs to the stored account. Blending two libraries would make
+                the ranking meaningless, so switching empties the library first.
+            </Body>
+        </Notice>
+    }
+
+    @if (_pending == Pending.Switch)
+    {
+        <div class="confirm">
+            <span class="warn">
+                Switching empties the library — @Formatting.Number(_summary.AchievementCount)
+                cached achievements — and keeps the stored key. The next sync starts from nothing.
+            </span>
+
+            @if (_row.SwitchTarget is not null)
+            {
+                <button class="danger" type="button" disabled="@_busy"
+                        @onclick="() => Switch(_row.SwitchTarget.Value)">
+                    Yes, switch to @_row.SwitchPrompt
+                </button>
+            }
+
+            <SteamIdField ActionLabel="Switch to this account" Disabled="@_busy" OnAccepted="Switch" />
+
+            <button class="secondary" type="button" @onclick="() => _pending = Pending.None">Cancel</button>
+        </div>
+    }
 
     <div class="block">
         <div class="label">Steam Web API key</div>
-        <div class="key-row">
-            <div class="num key">Not stored yet</div>
-            <button class="secondary" disabled>Replace</button>
-        </div>
+        @if (_replacingKey)
+        {
+            <ApiKeyForm SubmitLabel="Replace key" OnAccepted="KeyReplaced" />
+        }
+        else
+        {
+            <div class="key-row">
+                <div class="num key">@KeyState</div>
+                <button class="secondary" type="button" @onclick="() => _replacingKey = true">Replace</button>
+            </div>
+        }
         <div class="hint">Encrypted with Windows DPAPI for this user account. Never stored in plaintext.</div>
     </div>
 
@@ -45,21 +105,127 @@
 
     <div class="block">
         <div class="label">Local data</div>
-        <Notice Severity="NoticeSeverity.Danger" Title="Reset database" ActionLabel="Reset">
-            <Body>
-                Deletes @Formatting.Number(_summary.AchievementCount) cached achievements and all
-                snapshots. The next sync starts from nothing.
-            </Body>
-        </Notice>
+        @if (_pending == Pending.Reset)
+        {
+            <Notice Severity="NoticeSeverity.Danger" Title="Reset database">
+                <Body>
+                    This cannot be undone. @Formatting.Number(_summary.AchievementCount) cached
+                    achievements, every snapshot and the stored key will be deleted.
+                </Body>
+            </Notice>
+            <div class="confirm">
+                <button class="secondary" type="button" @onclick="() => _pending = Pending.None">Cancel</button>
+                <button class="danger" type="button" @onclick="Reset">Yes, reset</button>
+            </div>
+        }
+        else
+        {
+            <Notice Severity="NoticeSeverity.Danger" Title="Reset database" ActionLabel="Reset"
+                    OnAction="() => _pending = Pending.Reset">
+                <Body>
+                    Deletes @Formatting.Number(_summary.AchievementCount) cached achievements and all
+                    snapshots. The next sync starts from nothing.
+                </Body>
+            </Notice>
+        }
     </div>
 </div>
 
 @code {
+    /// <summary>
+    /// Which destructive action is one click from happening. Two-step in place
+    /// rather than a modal: a dialog owns a focus trap, Escape and scroll
+    /// locking, none of which can be verified anywhere but Windows.
+    /// </summary>
+    private enum Pending { None, Switch, Reset }
+
+    private readonly CancellationTokenSource _cancellation = new();
+
     private LibrarySummary _summary = new(0, 0, "", "");
+    private AccountRow _row = AccountRowView.For(null, null);
+    private Pending _pending = Pending.None;
+    private bool _replacingKey;
+    private bool _busy;
 
     private string Accent => Preferences.Accent ?? AccentPalette.Default;
 
-    protected override void OnInitialized() => _summary = Library.GetSummary(Clock.Now);
+    private string KeyState => Onboarding.Step == OnboardingStep.Ready
+        ? "Stored, encrypted for this Windows account"
+        : "Not stored yet";
+
+    protected override void OnInitialized()
+    {
+        Read();
+
+        Accounts.Changed += HandleAccountsChanged;
+        LibraryChanged.Changed += HandleLibraryChanged;
+    }
+
+    private void Read()
+    {
+        _summary = Library.GetSummary(Clock.Now);
+        _row = AccountRowView.For(Accounts.Current, Accounts.Mismatch);
+    }
+
+    private void HandleAccountsChanged() => InvokeAsync(() =>
+    {
+        _row = AccountRowView.For(Accounts.Current, Accounts.Mismatch);
+        StateHasChanged();
+    });
+
+    private void HandleLibraryChanged() => InvokeAsync(() =>
+    {
+        try
+        {
+            Read();
+        }
+        // SQLITE_BUSY and SQLITE_LOCKED only — the race against a sync that has
+        // just finished writing. Any other code is a real failure and must not
+        // be swallowed forever behind stale data.
+        catch (SqliteException e) when (e.SqliteErrorCode is 5 or 6)
+        {
+            return;
+        }
+
+        StateHasChanged();
+    });
 
     private void Choose(string accent) => Preferences.SetAccent(accent);
+
+    private async Task Switch(ulong steamId64)
+    {
+        _busy = true;
+
+        try
+        {
+            await Accounts.SwitchToAsync(steamId64, _cancellation.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            return;
+        }
+        finally
+        {
+            _busy = false;
+            _pending = Pending.None;
+        }
+    }
+
+    // Nothing to navigate to: clearing the stored account makes the step
+    // ChooseAccount, and AppShell's guard carries the user to onboarding.
+    private void Reset()
+    {
+        _pending = Pending.None;
+        Accounts.ResetEverything();
+    }
+
+    private void KeyReplaced() => _replacingKey = false;
+
+    public void Dispose()
+    {
+        Accounts.Changed -= HandleAccountsChanged;
+        LibraryChanged.Changed -= HandleLibraryChanged;
+        _cancellation.Cancel();
+        _cancellation.Dispose();
+    }
 }

@@ -60,3 +60,30 @@
 }
 
 .secondary:disabled { opacity: 0.45; cursor: default; }
+
+.confirm {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 14px;
+    border: 1px solid var(--danger-border);
+    border-radius: 9px;
+    background: var(--danger-bg);
+}
+
+.confirm .warn { font-size: 13px; color: var(--danger-text); text-wrap: pretty; }
+
+.danger {
+    align-self: flex-start;
+    font: inherit;
+    font-size: 13px;
+    font-weight: 600;
+    padding: 11px 14px;
+    border-radius: 8px;
+    border: 1px solid var(--danger-button-border);
+    background: var(--danger-button);
+    color: var(--danger-text);
+    cursor: pointer;
+}
+
+.danger:disabled { opacity: 0.55; cursor: default; }
