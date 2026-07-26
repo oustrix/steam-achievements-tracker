@@ -7,10 +7,9 @@ namespace SteamAchievements.Core.Data;
 /// <summary>
 /// Owns a writable connection of its own. WAL allows readers alongside a
 /// writer but still permits only one writer at a time, so a click on the
-/// accent picker during a sync would otherwise fail with SQLITE_BUSY. The
-/// connection this is constructed with is expected to carry a busy timeout;
-/// a single-row update against <c>settings</c> finishes in microseconds, so
-/// waiting out a sync transaction is invisible.
+/// accent picker during a sync would otherwise fail with SQLITE_BUSY.
+/// <see cref="Database.Open"/> sets the busy timeout that turns that failure
+/// into a short wait, so a connection from there is all this needs.
 /// </summary>
 public sealed class SqliteUserPreferences : IUserPreferences
 {

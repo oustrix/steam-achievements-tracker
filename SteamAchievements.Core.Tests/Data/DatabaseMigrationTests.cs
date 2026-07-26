@@ -76,6 +76,40 @@ public class DatabaseMigrationTests
         }
     }
 
+    /// <summary>
+    /// The mitigation belongs to the writer. WAL permits only one writer at a
+    /// time, so writing the accent while a sync holds the write lock fails
+    /// immediately with SQLITE_BUSY unless the connection is willing to wait.
+    /// Nothing else in the process sets this, so a connection that arrives
+    /// without it makes the accent picker fail under exactly the conditions it
+    /// was designed to survive.
+    /// </summary>
+    [Fact]
+    public void WritableConnectionsWaitOutAnotherWriterInsteadOfFailing()
+    {
+        using var connection = Database.Open(":memory:");
+
+        Assert.Equal(5000, connection.QuerySingle<long>("PRAGMA busy_timeout"));
+    }
+
+    [Fact]
+    public void ReadOnlyConnectionsCarryTheSameTimeout()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"sat-{Guid.NewGuid():N}.db");
+
+        try
+        {
+            using (Database.Open(path)) { }
+            using var reader = Database.OpenRead(path);
+
+            Assert.Equal(5000, reader.QuerySingle<long>("PRAGMA busy_timeout"));
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
     [Fact]
     public void ReadingAndWritingThroughSeparateConnectionsDoesNotConflict()
     {

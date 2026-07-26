@@ -5,11 +5,21 @@ namespace SteamAchievements.Core.Data;
 
 public static class Database
 {
+    /// <summary>
+    /// A writable connection: the sync engine's, and the accent picker's.
+    ///
+    /// WAL lets readers run alongside a writer but still permits only one
+    /// writer at a time, so a write issued while a sync holds the write lock
+    /// would fail immediately with SQLITE_BUSY. <c>busy_timeout</c> turns that
+    /// into a wait — a single-row update against <c>settings</c> finishes in
+    /// microseconds, and waiting out a sync's transaction is invisible.
+    /// </summary>
     public static SqliteConnection Open(string path)
     {
         var connection = new SqliteConnection($"Data Source={path}");
         connection.Open();
-        connection.Execute("PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;");
+        connection.Execute(
+            "PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000;");
         Migrate(connection);
         return connection;
     }
