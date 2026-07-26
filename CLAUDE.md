@@ -63,6 +63,52 @@ about your change.
 - Fixtures must be anonymized before committing: strip `key=`, replace real
   `steamid` values. A committed API key is a leaked credential.
 
+## Current state
+
+`SteamAchievements.Core` is complete and covered by 74 tests: VDF parsing,
+reading the logged-in account, the Steam API client with its error taxonomy,
+SQLite storage, the sync planner and orchestrator, and the ranking formula.
+
+Not built yet: everything the user can see. The WPF host is an empty window,
+`SteamAchievements.UI` still holds Razor template boilerplate, and the
+`ISteamPathProvider` / `ISecretStore` implementations, onboarding and screens
+belong to a follow-up plan. The `settings` table and `sync_state.last_error`
+are written but nothing reads them yet — that is expected, not an oversight.
+
+## Facts learned the hard way
+
+These cost real debugging time. Do not rediscover them.
+
+- **Dapper cannot map into `ValueTuple`**, and does not translate `snake_case`
+  columns to PascalCase. Every query aliases its columns explicitly
+  (`SELECT app_id AS AppId`) and materializes into a private row record.
+- **SQLite returns `Int64` for every INTEGER column**, and Dapper's constructor
+  materializer needs an exact CLR type match. Row records use `long` and narrow
+  in the projection; declaring `uint` throws at runtime on multi-row queries.
+- **`GameRepository` is not thread-safe.** One `SqliteConnection` cannot serve
+  overlapping transactions, so `SyncOrchestrator` serializes every repository
+  call behind a lock while keeping HTTP concurrent. A two-game test fixture
+  hides this completely; a real library breaks constantly.
+- **`PublishSingleFile` is not enough for WPF.** Without
+  `IncludeNativeLibrariesForSelfExtract`, native libraries ship loose next to
+  the executable. CI has a step that fails the build if `publish/` contains more
+  than one file.
+- **Steam's error responses are HTML, not JSON**, and a missing key returns 400
+  or 401 depending on the endpoint. See `docs/steam-api.md`.
+
+## Reviewing your own plans
+
+The plan in `docs/superpowers/plans/` was written without the ability to run
+it, and reviews found real defects in eight of its nine tasks — mutable shared
+state, unhandled malformed input, a concurrency hazard, a silent no-op that
+would have disabled the sync cache entirely. Its final section records each
+divergence.
+
+Treat plan code as a proposal, not as truth: **the shipped code and `git log`
+are authoritative.** When implementing from a plan and a test fails against the
+plan's own implementation, report the discrepancy instead of adjusting the test
+to match.
+
 ## Conventions
 
 - The ranking formula lives in `Core/Analytics` and is pure and unit-tested —

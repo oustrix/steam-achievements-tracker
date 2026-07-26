@@ -11,9 +11,11 @@
   <img alt="status" src="https://img.shields.io/badge/status-early%20development-orange">
 </p>
 
-> **Status: early development.** Nothing here is usable yet — the design is
-> settled and implementation is starting. Watch the repo if you want the first
-> release.
+> **Status: early development — no usable release yet.** The engine is done and
+> tested: it reads your local Steam install, syncs your library and achievement
+> progress from the Steam Web API into SQLite, and ranks games by remaining
+> effort. What is missing is the part you can actually look at — the window, the
+> onboarding and the screens. Watch the repo if you want the first release.
 
 ## The problem
 
@@ -99,9 +101,13 @@ API and Steam's image CDN.
 ## Building from source
 
 ```bash
-dotnet test                  # logic tests, run anywhere
-dotnet publish SteamAchievements.Windows -r win-x64 -c Release
+dotnet test SteamAchievements.Core.Tests    # 74 logic tests, run anywhere
+dotnet publish SteamAchievements.Windows -r win-x64 -c Release   # Windows only
 ```
+
+Always name the test project: a bare `dotnet test` at the repository root fails
+on non-Windows hosts, because the solution includes the `net10.0-windows` WPF
+project.
 
 The Windows host uses WPF and therefore only builds on Windows; everything
 else — API client, sync engine, ranking, storage — is platform-agnostic and
