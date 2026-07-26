@@ -18,20 +18,6 @@ public sealed class SyncOrchestrator
     private readonly RateLimiter _rateLimiter = new(requestsPerSecond: 5);
     private readonly ResiliencePipeline _retry;
 
-    // GameRepository (Data/GameRepository.cs) wraps a single SqliteConnection
-    // and is not documented as thread-safe. Microsoft.Data.Sqlite connections
-    // are not safe to use concurrently from multiple threads, and ADO.NET only
-    // permits one active transaction per connection — several repository
-    // methods (UpsertSchema, UpsertGlobalPercentages, ...) open their own
-    // transaction internally. With WorkerCount workers calling the repository
-    // in parallel, two workers racing to BeginTransaction on the same
-    // connection throws "SQLite Error 1: 'cannot start a transaction within a
-    // transaction'" (or worse, interleaves writes silently). All repository
-    // access from the worker pool is therefore serialized through this lock;
-    // only the network calls — which are already rate-limited to ~5 req/s —
-    // run in parallel across workers.
-    private readonly Lock _dbLock = new();
-
     /// <summary>
     /// The production retry base delay: 1s, 2s, 4s, 8s under exponential
     /// backoff. Tests inject a much smaller value via <paramref name="retryBaseDelay"/>
@@ -84,13 +70,8 @@ public sealed class SyncOrchestrator
         var owned = await _retry.ExecuteAsync(
             async token => await _client.GetOwnedGamesAsync(steamId, token), cancellationToken);
 
-        IReadOnlyDictionary<uint, GameSyncState> states;
-
-        lock (_dbLock)
-        {
-            _repository.UpsertOwnedGames(owned);
-            states = _repository.GetSyncStates();
-        }
+        _repository.UpsertOwnedGames(owned);
+        var states = _repository.GetSyncStates();
 
         var plan = SyncPlanner.Plan(owned, states, DateTimeOffset.UtcNow, _options, force);
 
@@ -123,10 +104,7 @@ public sealed class SyncOrchestrator
 
         // Trend charts come later, but the history behind them cannot be
         // reconstructed after the fact — record it from the very first sync.
-        lock (_dbLock)
-        {
-            _repository.WriteSnapshot(DateTimeOffset.UtcNow);
-        }
+        _repository.WriteSnapshot(DateTimeOffset.UtcNow);
     }
 
     private async Task SyncGameAsync(ulong steamId, SyncWorkItem item, CancellationToken cancellationToken)
@@ -143,18 +121,11 @@ public sealed class SyncOrchestrator
 
                 if (schema.Count == 0)
                 {
-                    lock (_dbLock)
-                    {
-                        _repository.MarkNoAchievements(item.AppId);
-                    }
-
+                    _repository.MarkNoAchievements(item.AppId);
                     return;
                 }
 
-                lock (_dbLock)
-                {
-                    _repository.UpsertSchema(item.AppId, schema, now);
-                }
+                _repository.UpsertSchema(item.AppId, schema, now);
             }
 
             if (item.NeedGlobal)
@@ -163,10 +134,7 @@ public sealed class SyncOrchestrator
                 var percentages = await _retry.ExecuteAsync(
                     async token => await _client.GetGlobalPercentagesAsync(item.AppId, token), cancellationToken);
 
-                lock (_dbLock)
-                {
-                    _repository.UpsertGlobalPercentages(item.AppId, percentages);
-                }
+                _repository.UpsertGlobalPercentages(item.AppId, percentages);
             }
 
             if (item.NeedPlayer)
@@ -175,33 +143,21 @@ public sealed class SyncOrchestrator
                 var playerAchievements = await _retry.ExecuteAsync(
                     async token => await _client.GetPlayerAchievementsAsync(steamId, item.AppId, token), cancellationToken);
 
-                lock (_dbLock)
-                {
-                    _repository.UpsertPlayerAchievements(item.AppId, playerAchievements);
-                }
+                _repository.UpsertPlayerAchievements(item.AppId, playerAchievements);
             }
 
             // Written per game, which is what makes an interrupted sync resumable.
-            lock (_dbLock)
-            {
-                _repository.MarkSynced(item.AppId, item.Playtime, now);
-            }
+            _repository.MarkSynced(item.AppId, item.Playtime, now);
         }
         catch (SteamApiException e) when (e.Kind == SteamApiErrorKind.NoStatsForApp)
         {
             // Expected for 30-40% of a library: soundtracks, demos, tools.
-            lock (_dbLock)
-            {
-                _repository.MarkNoAchievements(item.AppId);
-            }
+            _repository.MarkNoAchievements(item.AppId);
         }
         catch (SteamApiException e) when (e.Kind != SteamApiErrorKind.InvalidKey)
         {
             // One bad game must not abort the whole sync; an invalid key must.
-            lock (_dbLock)
-            {
-                _repository.MarkError(item.AppId, e.Message);
-            }
+            _repository.MarkError(item.AppId, e.Message);
         }
     }
 
