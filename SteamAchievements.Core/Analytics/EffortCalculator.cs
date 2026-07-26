@@ -16,7 +16,13 @@ public sealed record GameEffort(
 /// Steam computes global achievement percentages across everyone who owns a
 /// game, including people who never launched it, so raw percentages are not
 /// comparable between titles. Normalizing against the game's own most common
-/// achievement removes that distortion.
+/// achievement removes that distortion — but normalizing alone collapses when
+/// a game's achievements are all similarly rare (see <see cref="AbsoluteRarityWeight"/>):
+/// a title nobody has played, whose every achievement sits at 2% globally, reads
+/// as "every achievement is average for this game" and costs almost nothing. The
+/// per-achievement cost therefore blends the relative (in-game) rarity with the
+/// achievement's absolute (global) rarity, so a uniformly-rare game still costs
+/// something even though no single achievement stands out from its peers.
 ///
 /// Deliberately does not attempt to flag "blocker" or "dead" achievements: a
 /// low global percentage does not reliably mean an achievement is hard or
@@ -29,8 +35,23 @@ public sealed record GameEffort(
 /// </summary>
 public static class EffortCalculator
 {
-    /// <summary>Floor for relative rarity; without it a 0% achievement yields infinity.</summary>
+    /// <summary>Floor for rarity ratios; without it a 0% achievement yields infinity.</summary>
     private const double RarityFloor = 0.001;
+
+    /// <summary>
+    /// Weight given to the absolute (global) rarity term relative to the
+    /// in-game relative term. The relative term is what makes costs
+    /// comparable across games of wildly different achievement counts and
+    /// audience sizes — it stays the dominant term. The absolute term exists
+    /// only to stop a game whose achievements are all uniformly rare (e.g.
+    /// Overture: 4 achievements at 2.1%-2.2%, or Rust - Staging Branch: 6 at
+    /// 3.7%-3.8%) from looking "free" just because nothing in that narrow
+    /// band stands out from its peers. Half weight is enough to fix that
+    /// failure mode without letting a single very rare achievement in an
+    /// otherwise-reasonable game dominate the score the way a 1.0 weight
+    /// would.
+    /// </summary>
+    private const double AbsoluteRarityWeight = 0.5;
 
     /// <summary>
     /// Cost assigned to a locked achievement whose global percent is unknown.
@@ -47,9 +68,14 @@ public static class EffortCalculator
             return 1;
         }
 
-        var relative = Math.Max(percent / maxPercent, RarityFloor);
-        return -Math.Log2(Math.Min(relative, 1));
+        var relative = Clamp01(percent / maxPercent);
+        var absolute = Clamp01(percent / 100);
+
+        return -Math.Log2(relative) + AbsoluteRarityWeight * -Math.Log2(absolute);
     }
+
+    /// <summary>Clamps a ratio into (RarityFloor, 1], keeping -log2 finite and non-negative.</summary>
+    private static double Clamp01(double ratio) => Math.Min(Math.Max(ratio, RarityFloor), 1);
 
     public static GameEffort Evaluate(IReadOnlyList<AchievementProgress> achievements)
     {

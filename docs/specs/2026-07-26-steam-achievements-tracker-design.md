@@ -182,18 +182,28 @@ Response handling and error codes live in `docs/steam-api.md`.
 ## 8. Ranking formula
 
 ```
-relative(a)  = percent(a) / max(percent across this game's achievements)
-cost(a)      = -log2( max(relative(a), 0.001) )
+relative(a)  = clamp( percent(a) / max(percent across this game's achievements) )
+absolute(a)  = clamp( percent(a) / 100 )
+cost(a)      = -log2(relative(a))  +  0.5 * -log2(absolute(a))
 effort(game) = Σ cost(a) over locked achievements
 ```
+
+where `clamp(x) = min(max(x, 0.001), 1)` keeps both ratios in `(0.001, 1]` so
+the logarithm never sees 0.
 
 Games are sorted by ascending `effort`.
 
 Normalizing against the game's own maximum removes the "bought but never
 launched" distortion: global percentages are computed across all owners,
 including those who never started the game, which makes raw percentages
-incomparable between titles. After normalization a game's most common
-achievement costs 0, and cost grows logarithmically — half as common adds one.
+incomparable between titles. The relative term alone gives a game's most
+common achievement cost 0, and grows logarithmically — half as common (within
+the game) adds one.
+
+The absolute term is a second, half-weighted cost computed against a fixed
+100% ceiling instead of the game's own maximum. It exists specifically to
+handle the case in 8.2 below, where the relative term alone gives a wrong
+answer. See 8.2 for why it is there before considering removing it.
 
 Mandatory implementation details:
 
