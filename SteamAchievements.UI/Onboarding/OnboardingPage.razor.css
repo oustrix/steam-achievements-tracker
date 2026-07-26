@@ -88,3 +88,9 @@
 }
 
 .dot { width: 7px; height: 7px; border-radius: 7px; background: var(--accent); flex: none; }
+
+.account.chosen { border-color: var(--accent); }
+
+/* The dashed clipboard field the mockup showed is gone with the clipboard
+   watcher (host design 3.4). Its .watching rule stays unused for now rather
+   than being deleted in a wiring commit. */

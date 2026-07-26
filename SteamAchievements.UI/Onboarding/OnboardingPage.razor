@@ -1,9 +1,15 @@
 @page "/onboarding"
+@layout OnboardingLayout
+@implements IDisposable
+@using SteamAchievements.Core.Local
+@inject IOnboarding Onboarding
+@inject ISyncController Sync
+@inject NavigationManager Navigation
 
 <PageTitle>Getting started</PageTitle>
 
 <div class="page">
-    <StepIndicator Labels="@(new[] { "account", "key", "first sync" })" Current="2" />
+    <StepIndicator Labels="@(new[] { "account", "key", "first sync" })" Current="@StepNumber" />
 
     <section class="card">
         <div class="head">
@@ -11,37 +17,61 @@
             <span class="sub">Found in your local Steam installation — nothing was sent anywhere.</span>
         </div>
 
-        <div class="account">
-            <div class="avatar"></div>
-            @* Placeholder values. The mockup shows a real account here; a real
-               SteamID64 must never be committed (CLAUDE.md), and these are
-               replaced by ISteamPathProvider in the Windows spec anyway. *@
-            <div class="who">
-                <span class="name">Your Steam account</span>
-                <span class="num id">76561190000000000</span>
+        @if (_accounts.Count == 0)
+        {
+            <div class="sub">
+                No Steam account was found on this machine. That is normal if Steam is not
+                installed or nobody has signed in — enter the SteamID64 instead.
             </div>
-            <span class="spacer"></span>
-            <button class="primary" disabled>Yes, continue</button>
-        </div>
+        }
+        else
+        {
+            @foreach (var account in _accounts)
+            {
+                <div class="account @(account.SteamId64 == _chosen ? "chosen" : null)">
+                    <div class="avatar"></div>
+                    <div class="who">
+                        <span class="name">@Display(account)</span>
+                        <span class="num id">@account.SteamId64</span>
+                    </div>
+                    <span class="spacer"></span>
+                    <button class="primary" type="button" disabled="@_busy"
+                            @onclick="() => Choose(account.SteamId64)">
+                        Yes, continue
+                    </button>
+                </div>
+            }
+        }
 
-        <button class="link" disabled>Enter a SteamID64 or profile URL instead</button>
+        @if (_manual || _accounts.Count == 0)
+        {
+            <SteamIdField ActionLabel="Use this account" Disabled="@_busy" OnAccepted="Choose" />
+        }
+        else
+        {
+            <button class="link" type="button" @onclick="() => _manual = true">
+                Enter a SteamID64 or profile URL instead
+            </button>
+        }
     </section>
 
-    <section class="card key">
+    <section class="card key @(_step == OnboardingStep.ChooseAccount ? "dim" : null)">
         <div class="head">
             <span class="title">Paste your Steam Web API key</span>
             <span class="sub bright">
                 The button opens Steam's key page — you are already signed in there. Copy the
-                key and this app picks it up from the clipboard on its own.
+                key and paste it here.
             </span>
         </div>
 
-        <div class="key-row">
-            <button class="primary" disabled>Open key page</button>
-            <div class="watching num">
-                <span class="dot"></span>watching clipboard for 32 hex characters
-            </div>
-        </div>
+        @if (_step == OnboardingStep.ChooseAccount)
+        {
+            <div class="sub">Choose an account first — the key is checked against it.</div>
+        }
+        else
+        {
+            <ApiKeyForm SubmitLabel="Save key" OnAccepted="KeyAccepted" />
+        }
 
         <div class="sub">
             Steam only issues keys to accounts with at least $5 in purchases. If the page
@@ -52,8 +82,80 @@
     <section class="card dim">
         <span class="title">First sync</span>
         <span class="sub">
-            Roughly 9 minutes for 1 500 games, limited by Steam's rate limits. Later syncs
-            take seconds.
+            It starts on its own once the key is stored. Roughly 9 minutes for 1 500 games,
+            limited by Steam's rate limits. Later syncs take seconds.
         </span>
     </section>
 </div>
+
+@code {
+    private readonly CancellationTokenSource _cancellation = new();
+
+    private IReadOnlyList<SteamAccount> _accounts = [];
+    private OnboardingStep _step;
+    private ulong? _chosen;
+    private bool _manual;
+    private bool _busy;
+
+    private int StepNumber => _step switch
+    {
+        OnboardingStep.ChooseAccount => 1,
+        OnboardingStep.EnterKey => 2,
+        _ => 3,
+    };
+
+    protected override void OnInitialized()
+    {
+        _accounts = Onboarding.DiscoveredAccounts;
+        _step = Onboarding.Step;
+
+        Onboarding.Changed += HandleChanged;
+    }
+
+    private static string Display(SteamAccount account) =>
+        account.PersonaName.Length > 0 ? account.PersonaName : account.AccountName;
+
+    // IOnboarding carries the same threading contract as ISyncPresenter, and a
+    // component written to it stays correct if the event ever starts arriving
+    // off the render thread.
+    private void HandleChanged() => InvokeAsync(() =>
+    {
+        _step = Onboarding.Step;
+        StateHasChanged();
+    });
+
+    private async Task Choose(ulong steamId64)
+    {
+        _busy = true;
+
+        try
+        {
+            await Onboarding.ChooseAccountAsync(steamId64, _cancellation.Token);
+            _chosen = steamId64;
+        }
+        catch (OperationCanceledException)
+        {
+            return;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    // The mockup's third card. The user has an empty library and exactly one
+    // useful next action, so it is taken for them — on the screen that shows
+    // its progress and carries Pause and Cancel.
+    private void KeyAccepted()
+    {
+        Sync.Start(force: false);
+        Navigation.NavigateTo("sync");
+    }
+
+    public void Dispose()
+    {
+        Onboarding.Changed -= HandleChanged;
+        _cancellation.Cancel();
+        _cancellation.Dispose();
+    }
+}

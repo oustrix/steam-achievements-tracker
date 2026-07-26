@@ -1,0 +1,6 @@
+.frame {
+    min-height: 100vh;
+    overflow-y: auto;
+    background: var(--bg-page);
+    color: var(--text);
+}

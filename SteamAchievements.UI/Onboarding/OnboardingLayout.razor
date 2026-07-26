@@ -1,0 +1,11 @@
+@inherits LayoutComponentBase
+@inject IUserPreferences Preferences
+
+@* No sidebar. Until onboarding is complete there is nowhere else to go, and
+   drawing navigation to Sync and Settings offers doors that are not open. The
+   accent still has to be set here: it is a custom property read by every
+   component below, and AppShell — which normally declares it — is not in this
+   tree. *@
+<div class="frame" style="--accent: @(Preferences.Accent ?? AccentPalette.Default)">
+    @Body
+</div>
