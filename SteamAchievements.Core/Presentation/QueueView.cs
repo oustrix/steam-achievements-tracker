@@ -31,4 +31,19 @@ public sealed record LibrarySummary(
     int GameCount,
     int AchievementCount,
     string CountsText,
-    string LastSyncText);
+    string LastSyncText)
+{
+    /// <summary>
+    /// Builds the sidebar summary from the two counts and the last sync time.
+    ///
+    /// Composed here rather than at each call site because the preview host
+    /// renders the same card from fixtures; two hand-written copies of the same
+    /// sentence let the preview drift away from the real screen.
+    /// </summary>
+    public static LibrarySummary Build(
+        int games, int achievements, DateTimeOffset? lastSync, DateTimeOffset now) =>
+        new(games,
+            achievements,
+            $"{Formatting.Number(games)} games · {Formatting.Number(achievements)} ach.",
+            lastSync is { } at ? $"Last sync {Formatting.Relative(at, now)}" : "Never synced");
+}

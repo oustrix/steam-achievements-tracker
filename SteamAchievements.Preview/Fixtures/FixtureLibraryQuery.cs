@@ -26,6 +26,15 @@ public enum Scenario
 
 public sealed class FixtureLibraryQuery : ILibraryQuery
 {
+    /// <summary>
+    /// The library size the mockup shows. The fixtures are fourteen games chosen
+    /// to exercise the ranking rules, so the counts on the sidebar and in the
+    /// history are stated rather than derived from them.
+    /// </summary>
+    private const int MockGames = 1482;
+
+    private const int MockAchievements = 61214;
+
     public Scenario Scenario { get; set; } = Scenario.Normal;
 
     private IReadOnlyList<FixtureGame> Source => Scenario switch
@@ -55,7 +64,7 @@ public sealed class FixtureLibraryQuery : ILibraryQuery
         var rows = Source.Select(g => QueueRowBuilder.Build(g.Game, g.Achievements)).ToList();
 
         // The mockup's denominator counts the whole library, achievements or not.
-        return new QueueView(rows, rows.Count == 0 ? 0 : 1482);
+        return new QueueView(rows, rows.Count == 0 ? 0 : MockGames);
     }
 
     public GameDetailView? GetGame(uint appId, DateTimeOffset now)
@@ -64,19 +73,10 @@ public sealed class FixtureLibraryQuery : ILibraryQuery
         return game is null ? null : GameDetailBuilder.Build(game.Game, game.Achievements, now);
     }
 
-    public LibrarySummary GetSummary(DateTimeOffset now)
-    {
-        if (Source.Count == 0)
-        {
-            return new LibrarySummary(0, 0, "0 games · 0 ach.", "Never synced");
-        }
-
-        var achievements = Source.Sum(g => g.Achievements.Count);
-
-        return new LibrarySummary(1482, 61214,
-            $"{Formatting.Number(1482)} games · {Formatting.Number(61214)} ach.",
-            $"Last sync {Formatting.Relative(now.AddMinutes(-14), now)}");
-    }
+    public LibrarySummary GetSummary(DateTimeOffset now) =>
+        Source.Count == 0
+            ? LibrarySummary.Build(0, 0, lastSync: null, now)
+            : LibrarySummary.Build(MockGames, MockAchievements, now.AddMinutes(-14), now);
 
     public IReadOnlyList<SyncRunView> GetSyncHistory(int limit, DateTimeOffset now)
     {
@@ -85,24 +85,21 @@ public sealed class FixtureLibraryQuery : ILibraryQuery
             return [];
         }
 
-        return new[]
-        {
-            (now.AddMinutes(-14),  "incremental", 4L,    2149L),
-            (now.AddHours(-13),    "incremental", 1L,     910L),
-            (now.AddDays(-4),      "full",     1482L,  531000L),
-            (now.AddDays(-4),      "schema",    214L,   66000L),
-        }
-        .Take(limit)
-        .Select(r => new SyncRunView(
-            Formatting.Timestamp(r.Item1, now),
-            r.Item2 switch
-            {
-                "full" => $"Full sync — {Formatting.Number(r.Item3)} games",
-                "incremental" => $"Incremental — {Formatting.Number(r.Item3)} games changed",
-                _ => $"Schema refresh — {Formatting.Number(r.Item3)} games stale",
-            },
-            Formatting.Duration(r.Item4),
-            Failed: false))
-        .ToList();
+        (DateTimeOffset At, string Kind, long Games, long DurationMs)[] runs =
+        [
+            (now.AddMinutes(-14), "incremental",         4L,   2149L),
+            (now.AddHours(-13),   "incremental",         1L,    910L),
+            (now.AddDays(-4),     "full",        MockGames, 531000L),
+            (now.AddDays(-4),     "schema",            214L,  66000L),
+        ];
+
+        return runs
+            .Take(limit)
+            .Select(r => new SyncRunView(
+                Formatting.Timestamp(r.At, now),
+                SyncRunView.Describe(r.Kind, r.Games, error: null),
+                Formatting.Duration(r.DurationMs),
+                Failed: false))
+            .ToList();
     }
 }

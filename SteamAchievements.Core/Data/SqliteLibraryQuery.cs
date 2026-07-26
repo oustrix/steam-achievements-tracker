@@ -105,13 +105,11 @@ public sealed class SqliteLibraryQuery : ILibraryQuery
         var lastSync = _connection.QuerySingleOrDefault<string?>(
             "SELECT last_full_sync_at FROM settings WHERE id = 1");
 
-        return new LibrarySummary(
+        return LibrarySummary.Build(
             games,
             achievements,
-            $"{Formatting.Number(games)} games · {Formatting.Number(achievements)} ach.",
-            lastSync is null
-                ? "Never synced"
-                : $"Last sync {Formatting.Relative(DateTimeOffset.Parse(lastSync), now)}");
+            lastSync is null ? null : DateTimeOffset.Parse(lastSync),
+            now);
     }
 
     public IReadOnlyList<SyncRunView> GetSyncHistory(int limit, DateTimeOffset now) =>
@@ -125,28 +123,10 @@ public sealed class SqliteLibraryQuery : ILibraryQuery
             """, new { Limit = limit })
             .Select(r => new SyncRunView(
                 Formatting.Timestamp(DateTimeOffset.Parse(r.StartedAt), now),
-                Describe(r),
+                SyncRunView.Describe(r.Kind, r.GamesSynced, r.Error),
                 Formatting.Duration(r.DurationMs),
                 r.Error is not null))
             .ToList();
-
-    private static string Describe(SyncRunRow run)
-    {
-        if (run.Error is not null)
-        {
-            return $"Failed — {run.Error}";
-        }
-
-        var count = Formatting.Number(run.GamesSynced);
-
-        return run.Kind switch
-        {
-            "full" => $"Full sync — {count} games",
-            "incremental" => $"Incremental — {count} games changed",
-            "schema" => $"Schema refresh — {count} games stale",
-            _ => $"{run.Kind} — {count} games",
-        };
-    }
 
     private static OwnedGame Game(GameRow row) => new(
         (uint)row.AppId, row.Name, string.Empty,
