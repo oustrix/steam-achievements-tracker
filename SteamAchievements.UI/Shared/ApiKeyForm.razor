@@ -49,7 +49,7 @@
     /// onboarding starts the first sync and navigates away, settings stays —
     /// so the form does not decide it.
     /// </summary>
-    [Parameter] public EventCallback OnAccepted { get; set; }
+    [Parameter, EditorRequired] public EventCallback OnAccepted { get; set; }
 
     private readonly CancellationTokenSource _cancellation = new();
 

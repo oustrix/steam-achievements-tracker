@@ -105,7 +105,8 @@ public partial class App : Application
         // Resolved eagerly: it is a subscriber, and a lazily-created subscriber
         // misses every event raised before the first screen that injects it is
         // drawn. The container disposes it with the provider, which unsubscribes
-        // it from the coordinator.
+        // it from both of its sources — the sync coordinator and the account
+        // administration service.
         _ = _services.GetRequiredService<LibraryChangeSignal>();
 
         // Asked, not recomputed. Re-deriving the step here would put the rule in

@@ -35,3 +35,7 @@ testdata/**/*.raw.json
 
 ## Claude Code worktrees — local scratch, never committed
 .claude/worktrees/
+
+## Superpowers scratch — plans and reports written while working, not project
+## documentation. A `git add -A` at merge time would otherwise commit it.
+.superpowers/

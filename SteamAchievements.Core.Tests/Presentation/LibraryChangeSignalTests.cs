@@ -24,6 +24,27 @@ public class LibraryChangeSignalTests
     }
 
     /// <summary>
+    /// Pausing is a button on the sync screen, and it leaves the library
+    /// half-written: whatever the run got through is on disk, so every screen
+    /// showing it is stale until it re-reads. The trailing edge is "left
+    /// Running", not "reached Idle".
+    /// </summary>
+    [Fact]
+    public void RaisesOnceWhenTheSyncPauses()
+    {
+        var sync = new FakeSyncPresenter();
+        using var signal = new LibraryChangeSignal(sync, new FakeAccountAdmin());
+
+        var raised = 0;
+        signal.Changed += () => raised++;
+
+        sync.Publish(Running(1));
+        sync.Publish(SyncStatusView.Idle with { Phase = SyncPhase.Paused, Completed = 1, Total = 100 });
+
+        Assert.Equal(1, raised);
+    }
+
+    /// <summary>
     /// Progress arrives about five times a second and GetQueue re-ranks the
     /// whole library. Re-reading on each report would run a full ranking pass
     /// under a writing sync and reorder rows beneath the user's cursor.
