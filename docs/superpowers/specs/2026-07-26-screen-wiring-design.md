@@ -445,12 +445,6 @@ Recorded during execution rather than reconstructed afterwards.
   raises `OnAccepted`, which is what onboarding uses to start the first sync
   and navigate away; settings simply stays and the form's own notice is the
   one it wanted. This removed a parameter rather than adding one.
-- **`SyncControlsView` also carries `Title`.** §4.1 left the sync card's
-  headline where it was, in the card's own `switch`. It is the same decision
-  from the same input, and splitting it would have put half the mapping under
-  test and half not. `SyncProgressCard`'s "Full sync in progress" became "Sync
-  in progress" in the move: the card cannot know whether a run was
-  incremental, and most runs are.
 - **The `SqliteException` catches are filtered to `SqliteErrorCode is 5 or
   6`** — SQLITE_BUSY and SQLITE_LOCKED. §8 described the catch as covering "a
   re-query racing a sync that has just finished writing", but an unfiltered
