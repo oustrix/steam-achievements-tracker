@@ -95,11 +95,18 @@ public partial class App : Application
         services.AddSingleton<SyncCoordinator>();
         services.AddSingleton<ISyncPresenter>(s => s.GetRequiredService<SyncCoordinator>());
         services.AddSingleton<ISyncController>(s => s.GetRequiredService<SyncCoordinator>());
+        services.AddSingleton<LibraryChangeSignal>();
 
         services.AddSingleton<IOnboarding, OnboardingService>();
         services.AddSingleton<IAccountAdmin, AccountAdminService>();
 
         _services = services.BuildServiceProvider();
+
+        // Resolved eagerly: it is a subscriber, and a lazily-created subscriber
+        // misses every event raised before the first screen that injects it is
+        // drawn. The container disposes it with the provider, which unsubscribes
+        // it from the coordinator.
+        _ = _services.GetRequiredService<LibraryChangeSignal>();
 
         // Asked, not recomputed. Re-deriving the step here would put the rule in
         // two places, and the copy would be the one that cannot be unit-tested.
