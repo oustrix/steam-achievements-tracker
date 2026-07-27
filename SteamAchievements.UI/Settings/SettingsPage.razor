@@ -68,7 +68,13 @@
 
             <SteamIdField ActionLabel="Switch to this account" Disabled="@_busy" OnAccepted="Switch" />
 
-            <button class="secondary" type="button" @onclick="() => _pending = Pending.None">Cancel</button>
+            @* Disabled while the switch runs. Hiding the panel while
+               SwitchToAsync is still in flight would give every visual signal of
+               cancellation and then empty the library anyway — and the switch is
+               only cancellable up to the profile lookup, so a Cancel that
+               promised to stop it would be lying about the rest. *@
+            <button class="secondary" type="button" disabled="@_busy"
+                    @onclick="() => _pending = Pending.None">Cancel</button>
         </div>
     }
 
