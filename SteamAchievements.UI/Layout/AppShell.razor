@@ -1,8 +1,13 @@
 @inherits LayoutComponentBase
+@using Microsoft.Data.Sqlite
 @implements IDisposable
 @inject ILibraryQuery Library
 @inject IUserPreferences Preferences
 @inject IClock Clock
+@inject IOnboarding Onboarding
+@inject IAccountAdmin Accounts
+@inject LibraryChangeSignal LibraryChanged
+@inject NavigationManager Navigation
 
 <div class="shell" style="--accent: @(Preferences.Accent ?? AccentPalette.Default)">
     <nav class="sidebar">
@@ -33,20 +38,64 @@
     protected override void OnInitialized()
     {
         _summary = Library.GetSummary(Clock.Now);
+
         Preferences.Changed += HandlePreferencesChanged;
+        LibraryChanged.Changed += HandleLibraryChanged;
+
+        // Two subscriptions, not one: these are different objects raising
+        // different events, and ResetEverything raises only the second. A shell
+        // listening to onboarding alone would miss exactly the case this guard
+        // exists for — the database reset while the application is running.
+        Onboarding.Changed += HandleStateChanged;
+        Accounts.Changed += HandleStateChanged;
+
+        Guard();
     }
 
-    // Changed carries no threading contract on the Core interface, and the
-    // shipping SqliteUserPreferences will be called from background sync
-    // work, not only from a click. Dispatching through InvokeAsync keeps
-    // StateHasChanged safe regardless of which context raised the event.
+    /// <summary>
+    /// The start path is chosen once, at process start. This covers everything
+    /// after that. It is safe from looping because OnboardingPage declares its
+    /// own layout and is therefore never inside this component.
+    /// </summary>
+    private void Guard()
+    {
+        if (Onboarding.Step != OnboardingStep.Ready)
+        {
+            Navigation.NavigateTo(OnboardingState.OnboardingRoute.TrimStart('/'));
+        }
+    }
+
+    private void HandleStateChanged() => InvokeAsync(Guard);
+
     private void HandlePreferencesChanged() => InvokeAsync(StateHasChanged);
 
-    // Load-bearing, not cleanup for its own sake: IUserPreferences will be a
-    // singleton in the shipping host, so it outlives any one AppShell
-    // instance. A page that declares its own @layout destroys and recreates
-    // AppShell, and without unsubscribing here each recreation would leave
-    // the previous instance's handler attached, leaking one subscription per
-    // layout swap.
-    public void Dispose() => Preferences.Changed -= HandlePreferencesChanged;
+    private void HandleLibraryChanged() => InvokeAsync(() =>
+    {
+        try
+        {
+            _summary = Library.GetSummary(Clock.Now);
+        }
+        // SQLITE_BUSY and SQLITE_LOCKED only — the race against a sync that has
+        // just finished writing. Any other code is a real failure and must not
+        // be swallowed forever behind stale data.
+        catch (SqliteException e) when (e.SqliteErrorCode is 5 or 6)
+        {
+            return;
+        }
+
+        StateHasChanged();
+    });
+
+    // Load-bearing, not cleanup for its own sake: these services are singletons
+    // in the shipping host, so they outlive any one AppShell instance. A page
+    // that declares its own @layout destroys and recreates AppShell, and each
+    // recreation would otherwise leave the previous instance's handlers
+    // attached.
+    public void Dispose()
+    {
+        Preferences.Changed -= HandlePreferencesChanged;
+        LibraryChanged.Changed -= HandleLibraryChanged;
+        Onboarding.Changed -= HandleStateChanged;
+        Accounts.Changed -= HandleStateChanged;
+    }
 }

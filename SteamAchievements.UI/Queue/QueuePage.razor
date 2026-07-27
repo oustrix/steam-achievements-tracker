@@ -1,10 +1,12 @@
 @page "/"
+@using Microsoft.Data.Sqlite
 @implements IDisposable
 @inject ILibraryQuery Library
 @inject IClock Clock
 @inject QueueState State
 @inject NavigationManager Navigation
 @inject IJSRuntime Js
+@inject LibraryChangeSignal LibraryChanged
 
 <PageTitle>Completion queue</PageTitle>
 
@@ -53,8 +55,29 @@
         _queue = Library.GetQueue(Clock.Now);
         State.CriteriaChanged += Refresh;
         State.SelectionChanged += Rerender;
+        LibraryChanged.Changed += HandleLibraryChanged;
         Refresh();
     }
+
+    // Re-reads once when a sync ends or the account changes, never during a
+    // run: GetQueue re-ranks the whole library, and reordering rows under the
+    // user's cursor five times a second is worse than being briefly stale.
+    private void HandleLibraryChanged() => InvokeAsync(() =>
+    {
+        try
+        {
+            _queue = Library.GetQueue(Clock.Now);
+        }
+        // SQLITE_BUSY and SQLITE_LOCKED only — the race against a sync that has
+        // just finished writing. Any other code is a real failure and must not
+        // be swallowed forever behind stale data.
+        catch (SqliteException e) when (e.SqliteErrorCode is 5 or 6)
+        {
+            return;
+        }
+
+        Refresh();
+    });
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -79,6 +102,7 @@
     {
         State.CriteriaChanged -= Refresh;
         State.SelectionChanged -= Rerender;
+        LibraryChanged.Changed -= HandleLibraryChanged;
     }
 
     /// <summary>
