@@ -4,7 +4,7 @@ namespace SteamAchievements.Cli;
 
 /// <summary>
 /// Captures one raw JSON response body per Steam endpoint the sync touches,
-/// so the synthetic test fixtures under SteamAchievements.Core.Tests/testdata
+/// so the synthetic test fixtures under tests/testdata
 /// can eventually be replaced with real ones. A DelegatingHandler in the CLI
 /// project rather than a change to SteamApiClient: Core has no reason to know
 /// its responses might be dumped to disk, and the anonymization step below is

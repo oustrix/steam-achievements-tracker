@@ -19,7 +19,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\SteamAchievements.Core\SteamAchievements.Core.csproj" />
+    <ProjectReference Include="..\..\src\SteamAchievements.Core\SteamAchievements.Core.csproj" />
   </ItemGroup>
 
 </Project>

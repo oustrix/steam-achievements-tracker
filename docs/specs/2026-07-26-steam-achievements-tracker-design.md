@@ -103,7 +103,7 @@ an application) and Photino (niche technology, few answers when it breaks).
 ## 5. Solution structure
 
 ```
-SteamAchievements.Core            net10.0          builds and tests on macOS
+src/SteamAchievements.Core        net10.0          builds and tests on macOS
 ├─ Steam/         SteamApiClient, rate limiter, retry, DTOs
 ├─ Local/         VdfParser, LoginUsersReader          (pure text parsing)
 ├─ Data/          SQLite, schema, migrations, repositories
@@ -111,11 +111,13 @@ SteamAchievements.Core            net10.0          builds and tests on macOS
 ├─ Analytics/     achievement cost, ranking
 └─ Abstractions/  ISteamPathProvider, ISecretStore     contracts only
 
-SteamAchievements.Core.Tests      net10.0          dotnet test on macOS
-SteamAchievements.UI              net10.0          Razor Class Library
-SteamAchievements.Windows         net10.0-windows  WPF + BlazorWebView,
+src/SteamAchievements.UI          net10.0          Razor Class Library
+src/SteamAchievements.Windows     net10.0-windows  WPF + BlazorWebView,
                                                    RegistrySteamPathProvider,
                                                    DpapiSecretStore (~150 lines)
+
+tests/SteamAchievements.Core.Tests  net10.0        dotnet test on macOS
+tests/testdata                                     recorded fixtures
 ```
 
 Boundary rule: code that parses text (VDF, JSON) lives in Core and is tested
@@ -396,7 +398,7 @@ see an empty window.
 Tests substitute an `HttpMessageHandler` that replays recorded fixtures.
 
 Fixtures are captured once on Windows with a real key, anonymized (`steamid`,
-`key`) and committed under `testdata/`, alongside real `loginusers.vdf` and
+`key`) and committed under `tests/testdata/`, alongside real `loginusers.vdf` and
 `appmanifest_*.acf` samples for the VDF parser tests.
 
 This makes the following verifiable on macOS: the VDF parser, classification

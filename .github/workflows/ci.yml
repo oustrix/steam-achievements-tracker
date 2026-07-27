@@ -22,11 +22,11 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '10.0.x'
-      - run: dotnet test SteamAchievements.Core.Tests --configuration Release --logger trx
+      - run: dotnet test tests/SteamAchievements.Core.Tests --configuration Release --logger trx
       - name: Build the component library
-        run: dotnet build SteamAchievements.UI --configuration Release
+        run: dotnet build src/SteamAchievements.UI --configuration Release
       - name: Build the preview host
-        run: dotnet build SteamAchievements.Preview --configuration Release
+        run: dotnet build src/SteamAchievements.Preview --configuration Release
 
   build-windows:
     runs-on: windows-latest
@@ -38,7 +38,7 @@ jobs:
           dotnet-version: '10.0.x'
       - name: Publish self-contained single file
         run: >
-          dotnet publish SteamAchievements.Windows
+          dotnet publish src/SteamAchievements.Windows
           --configuration Release
           --runtime win-x64
           --self-contained true
@@ -95,7 +95,7 @@ jobs:
           dotnet-version: '10.0.x'
       - name: Publish self-contained CLI
         run: >
-          dotnet publish SteamAchievements.Cli
+          dotnet publish src/SteamAchievements.Cli
           --configuration Release
           --runtime win-x64
           --self-contained true

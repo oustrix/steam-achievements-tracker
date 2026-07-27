@@ -115,8 +115,8 @@ API and Steam's image CDN.
 ## Building from source
 
 ```bash
-dotnet test SteamAchievements.Core.Tests    # 76 logic tests, run anywhere
-dotnet publish SteamAchievements.Windows -r win-x64 -c Release   # Windows only
+dotnet test tests/SteamAchievements.Core.Tests    # logic tests, run anywhere
+dotnet publish src/SteamAchievements.Windows -r win-x64 -c Release   # Windows only
 ```
 
 Always name the test project: a bare `dotnet test` at the repository root fails

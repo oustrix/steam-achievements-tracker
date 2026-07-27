@@ -3,16 +3,17 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.0.31903.59
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SteamAchievements.Core", "SteamAchievements.Core\SteamAchievements.Core.csproj", "{47A47DA5-99E6-4C2D-AE15-23BC75598F33}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SteamAchievements.Core", "src\SteamAchievements.Core\SteamAchievements.Core.csproj", "{47A47DA5-99E6-4C2D-AE15-23BC75598F33}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SteamAchievements.Core.Tests", "SteamAchievements.Core.Tests\SteamAchievements.Core.Tests.csproj", "{0FBD43B4-BAC9-4423-A216-799C113C51B1}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SteamAchievements.Core.Tests", "tests\SteamAchievements.Core.Tests\SteamAchievements.Core.Tests.csproj", "{0FBD43B4-BAC9-4423-A216-799C113C51B1}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SteamAchievements.UI", "SteamAchievements.UI\SteamAchievements.UI.csproj", "{0227C98A-2A98-497D-AA5C-24EF8D94151F}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SteamAchievements.UI", "src\SteamAchievements.UI\SteamAchievements.UI.csproj", "{0227C98A-2A98-497D-AA5C-24EF8D94151F}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SteamAchievements.Windows", "SteamAchievements.Windows\SteamAchievements.Windows.csproj", "{4A9AC8B9-0667-4AD1-AAC9-1FD1298BC67B}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SteamAchievements.Windows", "src\SteamAchievements.Windows\SteamAchievements.Windows.csproj", "{4A9AC8B9-0667-4AD1-AAC9-1FD1298BC67B}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SteamAchievements.Preview", "SteamAchievements.Preview\SteamAchievements.Preview.csproj", "{48DB6902-72FF-4290-B5FB-6F1F02138B76}"
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SteamAchievements.Cli", "SteamAchievements.Cli\SteamAchievements.Cli.csproj", "{5D1EB01A-B965-423F-9EA9-05F5FFDA9741}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SteamAchievements.Preview", "src\SteamAchievements.Preview\SteamAchievements.Preview.csproj", "{48DB6902-72FF-4290-B5FB-6F1F02138B76}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SteamAchievements.Cli", "src\SteamAchievements.Cli\SteamAchievements.Cli.csproj", "{5D1EB01A-B965-423F-9EA9-05F5FFDA9741}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

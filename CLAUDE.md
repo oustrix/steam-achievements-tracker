@@ -27,10 +27,14 @@ readable to everyone.
 ## Layout and the boundary rule
 
 ```
-SteamAchievements.Core        net10.0          all logic; builds/tests on macOS
-SteamAchievements.Core.Tests  net10.0          runs on macOS and Linux CI
-SteamAchievements.UI          net10.0          Razor Class Library (Blazor)
-SteamAchievements.Windows     net10.0-windows  WPF host + Windows API impls
+src/SteamAchievements.Core          net10.0          all logic; builds/tests on macOS
+src/SteamAchievements.UI            net10.0          Razor Class Library (Blazor)
+src/SteamAchievements.Windows       net10.0-windows  WPF host + Windows API impls
+src/SteamAchievements.Cli           net10.0          headless sync, runs on macOS
+src/SteamAchievements.Preview       net10.0          dev-only Blazor Server host
+
+tests/SteamAchievements.Core.Tests  net10.0          runs on macOS and Linux CI
+tests/testdata                                       recorded HTTP fixtures
 ```
 
 **Boundary rule:** code that parses text or talks HTTP belongs in Core and is
@@ -42,11 +46,11 @@ leak into Core — it breaks local development entirely.
 ## Commands
 
 ```bash
-dotnet test SteamAchievements.Core.Tests   # the local feedback loop
-dotnet build SteamAchievements.Core        # quick type check
-dotnet format                               # before committing
-dotnet run --project SteamAchievements.Preview   # see the UI on macOS
-dotnet build SteamAchievements.UI                # type check the components
+dotnet test tests/SteamAchievements.Core.Tests   # the local feedback loop
+dotnet build src/SteamAchievements.Core          # quick type check
+dotnet format src/SteamAchievements.UI           # before committing
+dotnet run --project src/SteamAchievements.Preview   # see the UI on macOS
+dotnet build src/SteamAchievements.UI                # type check the components
 ```
 
 Always name the test project. A bare `dotnet test` at the repository root
@@ -60,7 +64,7 @@ about your change.
   what was verified with live requests, including inconsistent status codes
   and HTML error bodies. Consult it; if reality disagrees, re-verify with the
   commands at the bottom of that file and update it.
-- Tests never hit the network. They replay recorded fixtures from `testdata/`
+- Tests never hit the network. They replay recorded fixtures from `tests/testdata/`
   through a substituted `HttpMessageHandler`.
 - Fixtures must be anonymized before committing: strip `key=`, replace real
   `steamid` values. A committed API key is a leaked credential.
@@ -75,7 +79,7 @@ sync state machine, onboarding, account administration, and the ranking formula.
 `SteamAchievements.UI` holds all six screens from the design mockup. They are
 developed and verified on macOS through `SteamAchievements.Preview`, a
 development-only Blazor Server host that renders the same components against
-fixtures — `dotnet run --project SteamAchievements.Preview`, then
+fixtures — `dotnet run --project src/SteamAchievements.Preview`, then
 http://localhost:5100. Error and empty states are reachable there through
 `?scenario=empty|invalid-key|private-profile|rarity-unknown|other-account`.
 

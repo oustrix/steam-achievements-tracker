@@ -154,13 +154,13 @@ The CLI prints both lists against your own library:
 
 ```bash
 export STEAM_API_KEY=<your key>
-dotnet run --project SteamAchievements.Cli -- --steamid <your SteamID64> --top 20
+dotnet run --project src/SteamAchievements.Cli -- --steamid <your SteamID64> --top 20
 ```
 
 The numbers in this document came from exactly that command on a 396-game
 library: 339 games with achievements, 146 in progress, 176 not started, 17
 fully completed.
 
-The calculation lives in `SteamAchievements.Core/Analytics/EffortCalculator.cs`
+The calculation lives in `src/SteamAchievements.Core/Analytics/EffortCalculator.cs`
 and is pure — no I/O, no clock, no state — so it can be read in one sitting and
 tested exhaustively.
