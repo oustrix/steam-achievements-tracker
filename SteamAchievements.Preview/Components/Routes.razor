@@ -1,14 +1,26 @@
 @using SteamAchievements.UI.Layout
+@using SteamAchievements.UI.Shared
 @using SteamAchievements.Preview.Components
 
 @* Routable components live in the RCL, so the router has to be told to look
    there as well as in this assembly. *@
 <ScenarioScope>
-    <Router AppAssembly="typeof(Program).Assembly"
-            AdditionalAssemblies="new[] { typeof(AppShell).Assembly }">
-        <Found Context="routeData">
-            <RouteView RouteData="routeData" DefaultLayout="typeof(AppShell)" />
-            <FocusOnNavigate RouteData="routeData" Selector="h1" />
-        </Found>
-    </Router>
+    @* Fills ApiKeyForm's hint slot for the whole application. The slot is empty
+       in the shipping host, which cascades nothing — the fixture's rule for
+       choosing an outcome exists only here. *@
+    <CascadingValue Name="@ApiKeyForm.HintSlot" Value="_keyOutcomeHint" IsFixed="true">
+        <Router AppAssembly="typeof(Program).Assembly"
+                AdditionalAssemblies="new[] { typeof(AppShell).Assembly }">
+            <Found Context="routeData">
+                <RouteView RouteData="routeData" DefaultLayout="typeof(AppShell)" />
+                <FocusOnNavigate RouteData="routeData" Selector="h1" />
+            </Found>
+        </Router>
+    </CascadingValue>
+
+    <LastLinkStrip />
 </ScenarioScope>
+
+@code {
+    private readonly RenderFragment _keyOutcomeHint = @<KeyOutcomeHint />;
+}

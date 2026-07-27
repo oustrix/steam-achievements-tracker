@@ -1,0 +1,11 @@
+.hint {
+    font-size: 12px;
+    line-height: 1.5;
+    color: var(--text-dim);
+    text-wrap: pretty;
+}
+
+.hint code {
+    font-family: var(--mono);
+    color: var(--text);
+}

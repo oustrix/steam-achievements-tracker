@@ -1,0 +1,24 @@
+@using SteamAchievements.Preview.Fixtures
+@implements IDisposable
+@inject FixtureLinks Links
+
+@* Development only, and outside the shell on purpose: IExternalLinks is reached
+   from the key form on two different screens, and on Windows every one of those
+   buttons hands the URL to the operating system and shows nothing. This is what
+   "shows it on screen" means on macOS — the strip appears once something has
+   actually been opened. *@
+@if (Links.LastUrl is not null)
+{
+    <div class="strip">
+        <span class="label">Would have opened</span>
+        <span class="url num">@Links.LastUrl</span>
+    </div>
+}
+
+@code {
+    protected override void OnInitialized() => Links.Opened += Handle;
+
+    private void Handle() => InvokeAsync(StateHasChanged);
+
+    public void Dispose() => Links.Opened -= Handle;
+}

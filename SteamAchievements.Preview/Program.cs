@@ -18,9 +18,17 @@ builder.Services.AddScoped<FixtureSync>();
 builder.Services.AddScoped<ISyncPresenter>(s => s.GetRequiredService<FixtureSync>());
 builder.Services.AddScoped<ISyncController>(s => s.GetRequiredService<FixtureSync>());
 
+// One state for both fixtures, because production has one IAccountStore and one
+// ISecretStore behind them: without this, a reset in settings leaves the key
+// "stored" and AppShell's guard never redirects — the exact case it exists for.
+builder.Services.AddScoped<FixtureState>();
 builder.Services.AddScoped<IOnboarding, FixtureOnboarding>();
 builder.Services.AddScoped<IAccountAdmin, FixtureAccountAdmin>();
-builder.Services.AddScoped<IExternalLinks, FixtureLinks>();
+
+// Registered concretely as well: LastLinkStrip subscribes to it to show the URL
+// a button would have opened.
+builder.Services.AddScoped<FixtureLinks>();
+builder.Services.AddScoped<IExternalLinks>(s => s.GetRequiredService<FixtureLinks>());
 
 builder.Services.AddScoped<LibraryChangeSignal>();
 

@@ -17,6 +17,8 @@
     </button>
 </div>
 
+@HostHint
+
 @if (_message is not null)
 {
     <Notice Severity="_message.Severity" Title="@_message.Title">
@@ -25,6 +27,21 @@
 }
 
 @code {
+    /// <summary>
+    /// The cascading name a host uses to put something under the field.
+    /// Cascaded rather than a parameter because both pages that embed this form
+    /// are routable, so nobody passes them anything.
+    /// </summary>
+    public const string HintSlot = "ApiKeyFormHint";
+
+    /// <summary>
+    /// Empty in the shipping host, which cascades nothing. The development
+    /// preview fills it with the rule its fixture uses to choose between the
+    /// four outcomes, so that rule is on screen next to the field instead of
+    /// being discovered in a fixture's source.
+    /// </summary>
+    [CascadingParameter(Name = HintSlot)] public RenderFragment? HostHint { get; set; }
+
     [Parameter] public string SubmitLabel { get; set; } = "Save key";
 
     /// <summary>

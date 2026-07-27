@@ -1,4 +1,5 @@
 using SteamAchievements.Core.App;
+using SteamAchievements.Core.Data;
 using SteamAchievements.Core.Local;
 using SteamAchievements.Core.Presentation;
 
@@ -8,50 +9,25 @@ namespace SteamAchievements.Preview.Fixtures;
 /// Onboarding without Steam and without a network.
 ///
 /// The four outcomes of a key submission are reachable by what is typed, and
-/// the rule is printed under the field rather than left to be found in this
-/// file: 32 hexadecimal characters is accepted, "reject" is refused, "offline"
-/// is unreachable, anything else is malformed.
+/// the rule is printed under the field by the preview host rather than left to
+/// be found in this file: 32 hexadecimal characters is accepted,
+/// <see cref="RejectTrigger"/> is refused, <see cref="UnreachableTrigger"/> is
+/// unreachable, anything else is malformed.
+///
+/// What is stored lives in <see cref="FixtureState"/>, not here, because
+/// FixtureAccountAdmin writes the same two facts and production has them
+/// reading one store each.
 /// </summary>
-public sealed class FixtureOnboarding : IOnboarding
+public sealed class FixtureOnboarding(FixtureState state) : IOnboarding
 {
     public const string RejectTrigger = "reject";
     public const string UnreachableTrigger = "offline";
 
-    public const ulong FixtureSteamId = 76561190000000001;
-
-    private readonly FixtureLibraryQuery _library;
-
-    private ulong? _chosen;
-    private bool? _keyStored;
-
-    public FixtureOnboarding(FixtureLibraryQuery library) => _library = library;
-
-    /// <summary>
-    /// Every scenario except first-run represents a machine already past
-    /// onboarding — without that, AppShell's guard would send every screen in
-    /// the preview to /onboarding.
-    ///
-    /// Read on each access rather than captured in the constructor: the scenario
-    /// is set by ScenarioScope while the page renders, which is after the
-    /// container has built this. A constructor reading it sees Normal every
-    /// time, and ?scenario=first-run would silently do nothing.
-    /// </summary>
-    public OnboardingStep Step => OnboardingState.Evaluate(
-        ChosenAccount,
-        _keyStored ?? _library.Scenario != Scenario.FirstRun);
-
-    /// <summary>
-    /// The fixture's own notion of "an account is chosen" — the same expression
-    /// <see cref="Step"/> uses. Shared so <see cref="SubmitKeyAsync"/> enforces
-    /// the same ordering contract <see cref="IOnboarding.SubmitKeyAsync"/>
-    /// documents: only <c>?scenario=first-run</c>, before an account has been
-    /// chosen, has no account here.
-    /// </summary>
-    private ulong? ChosenAccount => _chosen ?? (_library.Scenario == Scenario.FirstRun ? null : FixtureSteamId);
+    public OnboardingStep Step => OnboardingState.Evaluate(state.Account?.SteamId64, state.KeyStored);
 
     public IReadOnlyList<SteamAccount> DiscoveredAccounts =>
     [
-        new SteamAccount(76561190000000001, "someone", "Someone", MostRecent: true, FixtureData.Now),
+        new SteamAccount(FixtureState.FixtureSteamId, "someone", "Someone", MostRecent: true, FixtureData.Now),
         new SteamAccount(76561190000000002, "otherperson", "Other Person", MostRecent: false, FixtureData.Now.AddDays(-30)),
     ];
 
@@ -59,14 +35,19 @@ public sealed class FixtureOnboarding : IOnboarding
 
     public Task ChooseAccountAsync(ulong steamId64, CancellationToken cancellationToken)
     {
-        _chosen = steamId64;
+        // An account typed by hand has no persona name here, which is the same
+        // state ChooseAccountAsync reaches when steamcommunity does not answer —
+        // and the case the settings row's SteamID64 fallback is written for.
+        var discovered = DiscoveredAccounts.FirstOrDefault(a => a.SteamId64 == steamId64);
+
+        state.Store(new StoredAccount(steamId64, discovered?.PersonaName ?? "", ""));
         Changed?.Invoke();
         return Task.CompletedTask;
     }
 
     public async Task<KeySubmission> SubmitKeyAsync(string pasted, CancellationToken cancellationToken)
     {
-        if (ChosenAccount is null)
+        if (state.Account is null)
         {
             throw new InvalidOperationException("An account must be chosen before a key can be checked.");
         }
@@ -92,7 +73,7 @@ public sealed class FixtureOnboarding : IOnboarding
             return KeySubmission.Malformed;
         }
 
-        _keyStored = true;
+        state.StoreKey();
         Changed?.Invoke();
         return KeySubmission.Accepted;
     }

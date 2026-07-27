@@ -1,0 +1,12 @@
+@using SteamAchievements.Preview.Fixtures
+
+@* Development only. Cascaded into ApiKeyForm's hint slot by Routes.razor, so
+   the rule sits under the field it governs on both screens that embed the form.
+   Nothing like it ships: in the real host the outcome comes from Steam. *@
+<div class="hint">
+    <strong>Preview:</strong> the outcome is chosen by what you type —
+    32 hexadecimal characters is accepted,
+    <code>@FixtureOnboarding.RejectTrigger</code> is refused by Steam,
+    <code>@FixtureOnboarding.UnreachableTrigger</code> cannot reach Steam,
+    anything else is malformed.
+</div>
