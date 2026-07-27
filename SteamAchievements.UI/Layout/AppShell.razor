@@ -59,9 +59,18 @@
     /// </summary>
     private void Guard()
     {
-        if (Onboarding.Step != OnboardingStep.Ready)
+        var step = Onboarding.Step;
+
+        // The destination comes from RouteFor, not from a route constant picked
+        // here: that helper exists so the shell and the host cannot disagree
+        // about where a given step belongs, and a disagreement shows up as a
+        // wrong or blank first screen, discoverable only on Windows. The
+        // "not Ready" test stays, though — RouteFor(Ready) is "/", and
+        // navigating there unconditionally would throw a user off the settings
+        // screen every time this ran.
+        if (step != OnboardingStep.Ready)
         {
-            Navigation.NavigateTo(OnboardingState.OnboardingRoute.TrimStart('/'));
+            Navigation.NavigateTo(OnboardingState.RouteFor(step).TrimStart('/'));
         }
     }
 
