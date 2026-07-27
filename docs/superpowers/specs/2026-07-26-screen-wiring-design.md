@@ -443,8 +443,14 @@ Recorded during execution rather than reconstructed afterwards.
 - **`ApiKeyForm` renders the outcome notice for all four results, including
   `Accepted`**, where §3.4 gave `Accepted` to the embedding screen. It still
   raises `OnAccepted`, which is what onboarding uses to start the first sync
-  and navigate away; settings simply stays and the form's own notice is the
-  one it wanted. This removed a parameter rather than adding one.
+  and navigate away. The settings side needed a second correction before this
+  worked: the form sets `_message` and *then* awaits `OnAccepted`, whose first
+  handler set `_replacingKey = false` and unmounted the form before its own
+  render landed, so "Replace key" collapsed silently with no confirmation at
+  all — and `KeyState` did not change either, because `IOnboarding.Step` was
+  already `Ready` when replacing an existing key. The form now stays mounted
+  after an accepted replacement and a "Done" button on the settings side
+  dismisses it.
 - **The `SqliteException` catches are filtered to `SqliteErrorCode is 5 or
   6`** — SQLITE_BUSY and SQLITE_LOCKED. §8 described the catch as covering "a
   re-query racing a sync that has just finished writing", but an unfiltered
@@ -474,6 +480,58 @@ Recorded during execution rather than reconstructed afterwards.
   `SteamAccount`, and the four files that catch `SqliteException` need
   `Microsoft.Data.Sqlite`; `_Imports.razor` carries neither namespace and was
   left alone rather than widened for two callers.
+- **`Core/Presentation` gained a type §4 does not list: `DestructiveActions`.**
+  Nothing in this design asked what "Change account" and "Reset" should do
+  while a sync runs, and the answer written first was "nothing" — the screen
+  never looked at the phase. Both actions empty the tables while
+  `SyncOrchestrator` is still writing the old account's games, and no table
+  records which account a row came from, so the result is a silently blended
+  library rather than an error. The gate blocks only `Running`; `Paused` and
+  `CircuitOpen` have no run in flight, because `SyncCoordinator.Pause` cancels
+  the run and publishes `Paused` after it unwinds.
+
+- **`AccountRow` carries `ActiveAccountName` as well as `SwitchPrompt`**, which
+  §4.3 does not list. The confirmation button was built out of the sentence and
+  read "Yes, switch to Steam is signed in as otherperson". The record exists so
+  that copy is under test, and with only the sentence in it no test could see
+  the mistake.
+
+- **Replacing a key starts a sync.** §5.4 said only that "Replace" reveals the
+  form. `SyncCoordinator` publishes `Problem = InvalidKey`, only a successful
+  `Start` clears it, and `SyncControls.For` returns `PrimaryEnabled: false` for
+  that problem — so the one control able to call `Start` was disabled by the
+  state a successful replacement was supposed to end.
+  `OnboardingService.SubmitKeyAsync` clears the persisted `key_rejected_at`, so
+  a restart recovered, but nothing in memory did. Settings now calls
+  `Start(force: false)` exactly as onboarding does.
+
+- **The `SqliteException` catches on the two destructive writes are
+  unfiltered**, unlike the read path above. `SwitchToAsync` and
+  `ResetEverything` end in `Database.ResetLibrary` and a bare `VACUUM` against
+  a file with three live connections; SQLITE_BUSY is the realistic code, but
+  every other one matters just as much here, because the user has to be told
+  the library was not emptied. An exception leaving a Blazor event handler
+  inside `BlazorWebView` is a blank window, not a message.
+
+- **The two preview fixtures share one state object.** §9 described them
+  separately, and separately is how they were written: each kept its own copy
+  of "an account is stored" and "a key is stored", so a reset in settings left
+  the key reading as stored and `AppShell`'s guard never fired — the single
+  case §3.3 wrote that guard for. Production has one `IAccountStore` and one
+  `ISecretStore` behind both services. `FixtureState` reads the scenario
+  lazily, for the same reason the fixtures already did.
+
+- **§9's two "shown on screen" requirements needed a mechanism, and it is a
+  cascaded slot.** The key-outcome rule and the last opened URL are fixture
+  facts, and `SteamAchievements.UI` ships. `ApiKeyForm` declares a
+  `[CascadingParameter(Name = ApiKeyForm.HintSlot)] RenderFragment?` that the
+  shipping host never supplies; the preview host cascades its
+  `KeyOutcomeHint` over the whole router, so the rule sits under the field on
+  both screens that embed the form. The URL is `LastLinkStrip`, a preview-only
+  component rendered outside the shell — `IExternalLinks` is reached from more
+  than one screen, and on Windows every one of those buttons hands the URL to
+  the operating system and shows nothing.
+
 - **`dotnet format` must name its project.** A bare invocation at the
   repository root fails on macOS for the same NETSDK1100 reason a bare
   `dotnet test` does — the solution includes the WPF project. Implementers
