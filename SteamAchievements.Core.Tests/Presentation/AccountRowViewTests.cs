@@ -17,6 +17,17 @@ public class AccountRowViewTests
         Assert.Null(row.AvatarUrl);
         Assert.Null(row.SwitchPrompt);
         Assert.Null(row.SwitchTarget);
+        Assert.Null(row.ActiveAccountName);
+    }
+
+    /// <summary>
+    /// Without a mismatch there is nobody to switch to, and a name left over
+    /// from somewhere would put a stranger into a button label.
+    /// </summary>
+    [Fact]
+    public void NamesNobodyToSwitchToWithoutAMismatch()
+    {
+        Assert.Null(AccountRowView.For(Stored, mismatch: null).ActiveAccountName);
     }
 
     [Fact]
@@ -51,6 +62,9 @@ public class AccountRowViewTests
         Assert.Equal("someone", row.Name);
         Assert.Contains("currentuser", row.SwitchPrompt);
         Assert.Equal(76561190000000002UL, row.SwitchTarget);
+
+        // The bare name, not the sentence: it goes inside "Yes, switch to …".
+        Assert.Equal("currentuser", row.ActiveAccountName);
     }
 
     [Fact]
@@ -60,5 +74,6 @@ public class AccountRowViewTests
 
         Assert.Equal(AccountRowView.NoAccount, row.Name);
         Assert.Equal(76561190000000002UL, row.SwitchTarget);
+        Assert.Equal("currentuser", row.ActiveAccountName);
     }
 }
