@@ -7,12 +7,24 @@
 @inject IClock Clock
 @inject IAccountAdmin Accounts
 @inject IOnboarding Onboarding
+@inject ISyncPresenter SyncStatus
+@inject ISyncController Sync
 @inject LibraryChangeSignal LibraryChanged
 
 <PageTitle>Settings</PageTitle>
 
 <div class="page">
     <h1>Settings</h1>
+
+    @if (_writeFailed)
+    {
+        <Notice Severity="NoticeSeverity.Danger" Title="The local database could not be changed">
+            <Body>
+                Nothing on disk was rewritten as asked. Try again — and if it keeps failing,
+                close the application and reopen it, which releases every connection to the file.
+            </Body>
+        </Notice>
+    }
 
     <div class="account">
         @* Not CoverImage: that component is sized by its parent's .cover rule
@@ -31,7 +43,7 @@
             <span class="num id">@_row.Detail</span>
         </div>
         <span class="spacer"></span>
-        @if (_pending != Pending.Switch)
+        @if (_gate.Allowed && _pending != Pending.Switch)
         {
             <button class="secondary" type="button" @onclick="() => _pending = Pending.Switch">
                 Change account
@@ -39,10 +51,18 @@
         }
     </div>
 
+    @if (!_gate.Allowed)
+    {
+        <div class="blocked">@_gate.BlockedReason</div>
+    }
+
     @if (_row.SwitchPrompt is not null && _pending != Pending.Switch)
     {
+        @* The offer is still worth stating while a sync runs — the account
+           really has changed — but its action is not offered, because taking it
+           would empty the library under a live writer. *@
         <Notice Severity="NoticeSeverity.Info" Title="@_row.SwitchPrompt"
-                ActionLabel="Switch to it" OnAction="() => _pending = Pending.Switch">
+                ActionLabel="@SwitchAction" OnAction="() => _pending = Pending.Switch">
             <Body>
                 Cached data belongs to the stored account. Blending two libraries would make
                 the ranking meaningless, so switching empties the library first.
@@ -58,23 +78,25 @@
                 cached achievements — and keeps the stored key. The next sync starts from nothing.
             </span>
 
-            @if (_row.SwitchTarget is not null)
-            {
-                <button class="danger" type="button" disabled="@_busy"
-                        @onclick="() => Switch(_row.SwitchTarget.Value)">
-                    Yes, switch to @_row.SwitchPrompt
-                </button>
-            }
-
             <SteamIdField ActionLabel="Switch to this account" Disabled="@_busy" OnAccepted="Switch" />
 
-            @* Disabled while the switch runs. Hiding the panel while
-               SwitchToAsync is still in flight would give every visual signal of
-               cancellation and then empty the library anyway — and the switch is
-               only cancellable up to the profile lookup, so a Cancel that
-               promised to stop it would be lying about the rest. *@
-            <button class="secondary" type="button" disabled="@_busy"
-                    @onclick="() => _pending = Pending.None">Cancel</button>
+            <div class="actions">
+                @* Disabled while the switch runs. Hiding the panel while
+                   SwitchToAsync is still in flight would give every visual signal of
+                   cancellation and then empty the library anyway — and the switch is
+                   only cancellable up to the profile lookup, so a Cancel that
+                   promised to stop it would be lying about the rest. *@
+                <button class="secondary" type="button" disabled="@_busy"
+                        @onclick="() => _pending = Pending.None">Cancel</button>
+
+                @if (_row.SwitchTarget is not null)
+                {
+                    <button class="danger" type="button" disabled="@_busy"
+                            @onclick="() => Switch(_row.SwitchTarget.Value)">
+                        Yes, switch to @_row.ActiveAccountName
+                    </button>
+                }
+            </div>
         </div>
     }
 
@@ -83,6 +105,13 @@
         @if (_replacingKey)
         {
             <ApiKeyForm SubmitLabel="Replace key" OnAccepted="KeyReplaced" />
+
+            @* The form stays mounted after an accepted key so its own "Key
+               stored" notice is on screen to read; this is how it is dismissed. *@
+            @if (_keyReplaced)
+            {
+                <button class="secondary done" type="button" @onclick="DoneReplacing">Done</button>
+            }
         }
         else
         {
@@ -120,19 +149,26 @@
                 </Body>
             </Notice>
             <div class="confirm">
-                <button class="secondary" type="button" @onclick="() => _pending = Pending.None">Cancel</button>
-                <button class="danger" type="button" @onclick="Reset">Yes, reset</button>
+                <div class="actions">
+                    <button class="secondary" type="button" @onclick="() => _pending = Pending.None">Cancel</button>
+                    <button class="danger" type="button" @onclick="Reset">Yes, reset</button>
+                </div>
             </div>
         }
         else
         {
-            <Notice Severity="NoticeSeverity.Danger" Title="Reset database" ActionLabel="Reset"
-                    OnAction="() => _pending = Pending.Reset">
+            <Notice Severity="NoticeSeverity.Danger" Title="Reset database"
+                    ActionLabel="@ResetAction" OnAction="() => _pending = Pending.Reset">
                 <Body>
                     Deletes @Formatting.Number(_summary.AchievementCount) cached achievements and all
                     snapshots. The next sync starts from nothing.
                 </Body>
             </Notice>
+
+            @if (!_gate.Allowed)
+            {
+                <div class="blocked">@_gate.BlockedReason</div>
+            }
         }
     </div>
 </div>
@@ -149,8 +185,11 @@
 
     private LibrarySummary _summary = new(0, 0, "", "");
     private AccountRow _row = AccountRowView.For(null, null);
+    private DestructiveActionGate _gate = DestructiveActions.For(SyncStatusView.Idle);
     private Pending _pending = Pending.None;
     private bool _replacingKey;
+    private bool _keyReplaced;
+    private bool _writeFailed;
     private bool _busy;
 
     private string Accent => Preferences.Accent ?? AccentPalette.Default;
@@ -159,12 +198,25 @@
         ? "Stored, encrypted for this Windows account"
         : "Not stored yet";
 
+    // A null ActionLabel is how Notice renders no button at all. The offer
+    // disappears while the gate is closed; the notice itself stays, because what
+    // it observes is still true.
+    private string? SwitchAction => _gate.Allowed ? "Switch to it" : null;
+
+    private string? ResetAction => _gate.Allowed ? "Reset" : null;
+
     protected override void OnInitialized()
     {
         Read();
+        _gate = DestructiveActions.For(SyncStatus.Status);
 
         Accounts.Changed += HandleAccountsChanged;
         LibraryChanged.Changed += HandleLibraryChanged;
+
+        // This screen is the only one that can destroy the library, and doing so
+        // while a sync writes blends two accounts silently — so it has to know
+        // the phase, not only the summary.
+        SyncStatus.Changed += HandleSyncChanged;
     }
 
     private void Read()
@@ -176,6 +228,21 @@
     private void HandleAccountsChanged() => InvokeAsync(() =>
     {
         _row = AccountRowView.For(Accounts.Current, Accounts.Mismatch);
+        StateHasChanged();
+    });
+
+    private void HandleSyncChanged() => InvokeAsync(() =>
+    {
+        _gate = DestructiveActions.For(SyncStatus.Status);
+
+        // A confirmation panel left open when a sync starts is one click from
+        // emptying the library under a live writer. Closing it is the only
+        // honest answer: the click it was waiting for is no longer safe.
+        if (!_gate.Allowed)
+        {
+            _pending = Pending.None;
+        }
+
         StateHasChanged();
     });
 
@@ -201,6 +268,7 @@
     private async Task Switch(ulong steamId64)
     {
         _busy = true;
+        _writeFailed = false;
 
         try
         {
@@ -209,6 +277,16 @@
         catch (OperationCanceledException)
         {
             return;
+        }
+        // Unfiltered, unlike the read path above. This ends in
+        // Database.ResetLibrary and a bare VACUUM against a file with three live
+        // connections, where SQLITE_BUSY is realistic — but every other code
+        // matters just as much, because the user has to know the library was not
+        // emptied. An exception leaving a Blazor event handler inside
+        // BlazorWebView is a blank window, not a message.
+        catch (SqliteException)
+        {
+            _writeFailed = true;
         }
         finally
         {
@@ -222,15 +300,51 @@
     private void Reset()
     {
         _pending = Pending.None;
-        Accounts.ResetEverything();
+        _writeFailed = false;
+
+        try
+        {
+            Accounts.ResetEverything();
+        }
+        catch (SqliteException)
+        {
+            _writeFailed = true;
+        }
     }
 
-    private void KeyReplaced() => _replacingKey = false;
+    /// <summary>
+    /// Two things, and neither is obvious.
+    ///
+    /// The form is left mounted. It sets its "Key stored" notice and then awaits
+    /// this callback, so tearing it down here would remove it from the tree
+    /// before its own render landed and the replacement would confirm nothing.
+    /// "Done" is how the user puts the row back.
+    ///
+    /// The sync is started for the same reason onboarding starts it: it
+    /// re-validates the key at once. It also clears the state that made this
+    /// screen necessary — SyncCoordinator publishes Problem = InvalidKey and
+    /// only a successful Start overwrites the status wholesale, while
+    /// SyncControls disables the sync button for that very problem. Without this
+    /// call a replaced key leaves the application unable to sync until it is
+    /// restarted.
+    /// </summary>
+    private void KeyReplaced()
+    {
+        _keyReplaced = true;
+        Sync.Start(force: false);
+    }
+
+    private void DoneReplacing()
+    {
+        _keyReplaced = false;
+        _replacingKey = false;
+    }
 
     public void Dispose()
     {
         Accounts.Changed -= HandleAccountsChanged;
         LibraryChanged.Changed -= HandleLibraryChanged;
+        SyncStatus.Changed -= HandleSyncChanged;
         _cancellation.Cancel();
         _cancellation.Dispose();
     }

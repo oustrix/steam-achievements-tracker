@@ -73,6 +73,31 @@
 
 .confirm .warn { font-size: 13px; color: var(--danger-text); text-wrap: pretty; }
 
+/* The panel stacks — copy above, buttons below — but the buttons themselves sit
+   on one row and take their own width. Without this row they inherit the
+   column direction and each one spans the whole card, which reads as two
+   separate decisions rather than one choice. */
+.actions {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+}
+
+.actions .secondary,
+.actions .danger { align-self: auto; }
+
+/* Replaces a control the gate withdrew, so it occupies the same place in the
+   flow the button did. */
+.blocked {
+    font-size: 13px;
+    color: var(--text-dim);
+    text-wrap: pretty;
+}
+
+.done { align-self: flex-start; }
+
 .danger {
     align-self: flex-start;
     font: inherit;
