@@ -431,3 +431,56 @@ with three live connections — already on the host design's outstanding list.
 - **The two-step confirmation has no timeout.** A pending "Yes, reset" stays
   pending until it is clicked or cancelled. Navigating away discards it,
   because the field lives on the page.
+
+## 12. Divergences from this spec during implementation
+
+Recorded during execution rather than reconstructed afterwards.
+
+- **`SyncControlsView` carries no `Force` property**, though §4.1 lists one.
+  The primary button is `Start(force: false)` in every state where it is
+  enabled, and a full resync is its own button that needs no lookup. A
+  property that is always `false` is a field waiting to be misread.
+- **`ApiKeyForm` renders the outcome notice for all four results, including
+  `Accepted`**, where §3.4 gave `Accepted` to the embedding screen. It still
+  raises `OnAccepted`, which is what onboarding uses to start the first sync
+  and navigate away; settings simply stays and the form's own notice is the
+  one it wanted. This removed a parameter rather than adding one.
+- **`SyncControlsView` also carries `Title`.** §4.1 left the sync card's
+  headline where it was, in the card's own `switch`. It is the same decision
+  from the same input, and splitting it would have put half the mapping under
+  test and half not. `SyncProgressCard`'s "Full sync in progress" became "Sync
+  in progress" in the move: the card cannot know whether a run was
+  incremental, and most runs are.
+- **The `SqliteException` catches are filtered to `SqliteErrorCode is 5 or
+  6`** — SQLITE_BUSY and SQLITE_LOCKED. §8 described the catch as covering "a
+  re-query racing a sync that has just finished writing", but an unfiltered
+  catch also swallows a broken query, a corrupt file or a full disk, forever,
+  behind stale data. Found in review of the sync screen and applied to all
+  three screens.
+- **The settings screen's switch-confirmation "Cancel" is disabled while the
+  switch runs.** §3.3 described a two-step confirmation and said nothing about
+  the in-flight case, where hiding the panel gives every visual signal of
+  cancellation and then empties the library anyway. It is not wired to the
+  cancellation token: cancellation only reaches the profile lookup, and the
+  library wipe happens after it, so a Cancel that promised to stop the switch
+  would be lying about the rest.
+- **`AppShell`'s guard takes its destination from `OnboardingState.RouteFor`**
+  rather than from the `OnboardingRoute` constant, which is what §5.1 implied.
+  That helper exists so the shell and the host cannot disagree about where a
+  step belongs. The "not `Ready`" test stays: `RouteFor(Ready)` is the queue,
+  and navigating there unconditionally would throw a user off the settings
+  screen every time the guard ran.
+- **`FixtureOnboarding.SubmitKeyAsync` enforces the account-before-key
+  contract**, throwing `InvalidOperationException` when no account has been
+  chosen, as `OnboardingService` does. §9 did not ask for it. A fixture laxer
+  than the seam it imitates cannot catch the screen-ordering bug the interface
+  names, which is the one thing these fixtures exist for.
+- **Two `@using` lines the spec's code did not mention.**
+  `OnboardingPage.razor` needs `SteamAchievements.Core.Local` for
+  `SteamAccount`, and the four files that catch `SqliteException` need
+  `Microsoft.Data.Sqlite`; `_Imports.razor` carries neither namespace and was
+  left alone rather than widened for two callers.
+- **`dotnet format` must name its project.** A bare invocation at the
+  repository root fails on macOS for the same NETSDK1100 reason a bare
+  `dotnet test` does — the solution includes the WPF project. Implementers
+  were silently skipping the step until this was noticed.
