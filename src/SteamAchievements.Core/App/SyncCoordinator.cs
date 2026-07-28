@@ -122,27 +122,20 @@ public sealed class SyncCoordinator : ISyncPresenter, ISyncController, IDisposab
             return;
         }
 
-        bool started;
-
         lock (_gate)
         {
+            // A lock's body lowers to a try/finally, so returning from inside
+            // it still releases _gate — there is no bare-flag dance needed to
+            // carry the "already running" no-op past the closing brace.
             if (_status.Phase == SyncPhase.Running)
             {
-                started = false;
+                return;
             }
-            else
-            {
-                _pausing = false;
-                _cancellation = new CancellationTokenSource();
-                _status = SyncStatusView.Idle with { Phase = SyncPhase.Running };
-                _completion = RunAsync(account.SteamId64, force, _cancellation.Token);
-                started = true;
-            }
-        }
 
-        if (!started)
-        {
-            return;
+            _pausing = false;
+            _cancellation = new CancellationTokenSource();
+            _status = SyncStatusView.Idle with { Phase = SyncPhase.Running };
+            _completion = RunAsync(account.SteamId64, force, _cancellation.Token);
         }
 
         // Logged outside the lock for the same reason Publish raises outside
@@ -161,31 +154,28 @@ public sealed class SyncCoordinator : ISyncPresenter, ISyncController, IDisposab
 
     private void Stop(bool pausing)
     {
-        bool stopped;
-
         lock (_gate)
         {
+            // Same shape as Start: a lock's body lowers to a try/finally, so
+            // returning from inside it for the no-op case still releases
+            // _gate, with no flag needed to smuggle the outcome past the
+            // closing brace.
             if (_status.Phase != SyncPhase.Running)
             {
-                stopped = false;
+                return;
             }
-            else
-            {
-                _pausing = pausing;
-                _cancellation?.Cancel();
-                stopped = true;
-            }
+
+            _pausing = pausing;
+            _cancellation?.Cancel();
         }
 
-        // Logged only when the stop actually took effect, and outside the
-        // lock for the same reason as in Start: a "requested" line that
-        // fired every call — including the no-op ones — would be one thing,
-        // but logging under _gate at all risks blocking a reader of Status
-        // or Completion behind the sink's synchronous disk write.
-        if (stopped)
-        {
-            _log.LogInformation("sync {Action} requested", pausing ? "pause" : "cancel");
-        }
+        // Reached only when the stop actually took effect — the no-op case
+        // returned above — and outside the lock for the same reason as in
+        // Start: a "requested" line that fired every call, including the
+        // no-ops, would be one thing, but logging under _gate at all risks
+        // blocking a reader of Status or Completion behind the sink's
+        // synchronous disk write.
+        _log.LogInformation("sync {Action} requested", pausing ? "pause" : "cancel");
     }
 
     private async Task RunAsync(ulong steamId, bool force, CancellationToken cancellationToken)
