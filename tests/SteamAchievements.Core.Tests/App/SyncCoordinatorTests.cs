@@ -426,8 +426,13 @@ public class SyncCoordinatorTests
         Assert.True(log.Logged("sync paused"));
     }
 
+    // Scoped to the happy-path run rather than named after a class-wide
+    // guarantee: the constructor's key-rejection warning legitimately
+    // contains the word "key" (it names the condition, never the secret
+    // value — SyncCoordinator never reads the value at all), so a
+    // whole-class claim would be false the moment that branch runs.
     [Fact]
-    public void NeverMentionsAKeyBecauseItNeverReadsOne()
+    public void AStartAndCompleteRunNeverMentionsAKey()
     {
         var log = new RecordingLogger<SyncCoordinator>();
         var (coordinator, connection, _) = Build(

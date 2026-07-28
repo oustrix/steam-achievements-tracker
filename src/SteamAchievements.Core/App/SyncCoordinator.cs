@@ -122,20 +122,35 @@ public sealed class SyncCoordinator : ISyncPresenter, ISyncController, IDisposab
             return;
         }
 
+        bool started;
+
         lock (_gate)
         {
             if (_status.Phase == SyncPhase.Running)
             {
-                return;
+                started = false;
             }
-
-            _pausing = false;
-            _cancellation = new CancellationTokenSource();
-            _status = SyncStatusView.Idle with { Phase = SyncPhase.Running };
-            _log.LogInformation(
-                "sync started steam_id={SteamId} force={Force}", account.SteamId64, force);
-            _completion = RunAsync(account.SteamId64, force, _cancellation.Token);
+            else
+            {
+                _pausing = false;
+                _cancellation = new CancellationTokenSource();
+                _status = SyncStatusView.Idle with { Phase = SyncPhase.Running };
+                _completion = RunAsync(account.SteamId64, force, _cancellation.Token);
+                started = true;
+            }
         }
+
+        if (!started)
+        {
+            return;
+        }
+
+        // Logged outside the lock for the same reason Publish raises outside
+        // it: the file sink flushes synchronously and rotates with several
+        // File.Move calls, so logging under _gate would let a disk write
+        // block a UI thread that is only trying to read Status or Completion.
+        _log.LogInformation(
+            "sync started steam_id={SteamId} force={Force}", account.SteamId64, force);
 
         Changed?.Invoke();
     }
@@ -146,15 +161,29 @@ public sealed class SyncCoordinator : ISyncPresenter, ISyncController, IDisposab
 
     private void Stop(bool pausing)
     {
+        bool stopped;
+
         lock (_gate)
         {
             if (_status.Phase != SyncPhase.Running)
             {
-                return;
+                stopped = false;
             }
+            else
+            {
+                _pausing = pausing;
+                _cancellation?.Cancel();
+                stopped = true;
+            }
+        }
 
-            _pausing = pausing;
-            _cancellation?.Cancel();
+        // Logged only when the stop actually took effect, and outside the
+        // lock for the same reason as in Start: a "requested" line that
+        // fired every call — including the no-op ones — would be one thing,
+        // but logging under _gate at all risks blocking a reader of Status
+        // or Completion behind the sink's synchronous disk write.
+        if (stopped)
+        {
             _log.LogInformation("sync {Action} requested", pausing ? "pause" : "cancel");
         }
     }
@@ -259,6 +288,12 @@ public sealed class SyncCoordinator : ISyncPresenter, ISyncController, IDisposab
     /// <summary>
     /// Assigns under the lock and raises outside it. Raising while holding the
     /// lock would let a handler that reads <see cref="Status"/> re-enter it.
+    ///
+    /// Logging in this class follows the same rule and for a related reason:
+    /// the log sink flushes synchronously and rotates with several
+    /// <c>File.Move</c> calls, so a <c>_log</c> call made under <c>_gate</c>
+    /// would let a slow disk block a thread that only wants to read
+    /// <see cref="Status"/> or <see cref="Completion"/>.
     /// </summary>
     private void Publish(SyncStatusView status)
     {
