@@ -27,6 +27,30 @@ jobs:
         run: dotnet build src/SteamAchievements.UI --configuration Release
       - name: Build the preview host
         run: dotnet build src/SteamAchievements.Preview --configuration Release
+      - name: Verify no stock logging provider is registered anywhere under src/
+        run: |
+          # This branch's own CRITICAL finding (Task 11) was a stock console
+          # provider — Microsoft.Extensions.Logging.Console's AddSimpleConsole —
+          # printing the real Steam Web API key to stdout on every request,
+          # because that provider formats but does not scrub. The fix was
+          # structural (TextLoggerProvider, the shared format-then-scrub base
+          # every provider in this application now inherits from), but nothing
+          # in the type system stops a future author from registering one of
+          # the stock providers instead of inheriting it — the invariant is
+          # "remember to inherit", not "cannot happen". This step is the
+          # mechanical guard for that: it greps for an actual call to any
+          # stock provider's registration method (requiring the leading "."
+          # and trailing "(" so it flags .AddConsole( but not a comment
+          # merely mentioning AddSimpleConsole, several of which already exist
+          # to explain why this repository does not use it) and fails the
+          # build if one turns up anywhere under src/.
+          matches=$(grep -rnE '\.(AddConsole|AddSimpleConsole|AddJsonConsole|AddDebug|AddEventSourceLogger|AddEventLog)\(' src/ || true)
+          if [ -n "$matches" ]; then
+            echo "$matches"
+            echo "::error::A stock Microsoft.Extensions.Logging provider is registered under src/. Every provider in this application must go through SteamAchievements.Core.Diagnostics.TextLoggerProvider so Redaction.Scrub always runs — a stock provider does not scrub and can leak the Steam Web API key to its destination (this is exactly what Task 11 found live in the CLI)."
+            exit 1
+          fi
+          echo "No stock logging provider registrations found under src/."
 
   build-windows:
     runs-on: windows-latest
