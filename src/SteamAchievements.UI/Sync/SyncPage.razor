@@ -1,6 +1,5 @@
 @page "/sync"
 @implements IDisposable
-@using Microsoft.Data.Sqlite
 @using Microsoft.Extensions.Logging
 @inject ILibraryQuery Library
 @inject IClock Clock
@@ -103,46 +102,18 @@
     // rather than throws — InvokeAsync is what serializes it.
     private void HandleStatusChanged() => InvokeAsync(() =>
     {
-        try
+        if (ChangeHandlerGuard.Guard(Log, "reacting to a sync status change failed", () => _status = Sync.Status))
         {
-            _status = Sync.Status;
             StateHasChanged();
-        }
-        catch (Exception e)
-        {
-            Log.LogError(e, "reacting to a sync status change failed");
         }
     });
 
     private void HandleLibraryChanged() => InvokeAsync(() =>
     {
-        try
+        if (ChangeHandlerGuard.Reread(Log, "history", () => _history = Library.GetSyncHistory(20, Clock.Now)))
         {
-            _history = Library.GetSyncHistory(20, Clock.Now);
+            StateHasChanged();
         }
-        // 5 and 6 are SQLITE_BUSY and SQLITE_LOCKED: a re-read racing the write
-        // that has just finished. The previous history stays on screen and the
-        // next signal tries again; letting those out tears down the circuit and
-        // leaves an empty window. Every other error code — a broken query, a
-        // corrupt file, a full disk — is not this race and must not be
-        // swallowed forever behind stale data.
-        catch (SqliteException e) when (e.SqliteErrorCode is 5 or 6)
-        {
-            Log.LogWarning(e, "history re-read lost a race with the writer (code {Code})", e.SqliteErrorCode);
-
-            return;
-        }
-        // Nothing awaits this Task, so without this an escaping exception is
-        // simply lost: no message, no crash, a screen that quietly stops
-        // updating.
-        catch (Exception e)
-        {
-            Log.LogError(e, "history re-read failed");
-
-            return;
-        }
-
-        StateHasChanged();
     });
 
     private void Primary()

@@ -1,5 +1,4 @@
 @inherits LayoutComponentBase
-@using Microsoft.Data.Sqlite
 @using Microsoft.Extensions.Logging
 @implements IDisposable
 @inject ILibraryQuery Library
@@ -85,54 +84,20 @@
 
     private void HandleStateChanged() => InvokeAsync(() =>
     {
-        try
-        {
-            Guard();
-        }
-        catch (Exception e)
-        {
-            Log.LogError(e, "onboarding guard failed");
-        }
+        ChangeHandlerGuard.Guard(Log, "onboarding guard failed", Guard);
     });
 
     private void HandlePreferencesChanged() => InvokeAsync(() =>
     {
-        try
-        {
-            StateHasChanged();
-        }
-        catch (Exception e)
-        {
-            Log.LogError(e, "reacting to a preference change failed");
-        }
+        ChangeHandlerGuard.Guard(Log, "reacting to a preference change failed", StateHasChanged);
     });
 
     private void HandleLibraryChanged() => InvokeAsync(() =>
     {
-        try
+        if (ChangeHandlerGuard.Reread(Log, "summary", () => _summary = Library.GetSummary(Clock.Now)))
         {
-            _summary = Library.GetSummary(Clock.Now);
+            StateHasChanged();
         }
-        // SQLITE_BUSY and SQLITE_LOCKED only — the race against a sync that has
-        // just finished writing. Any other code is a real failure and must not
-        // be swallowed forever behind stale data.
-        catch (SqliteException e) when (e.SqliteErrorCode is 5 or 6)
-        {
-            Log.LogWarning(e, "summary re-read lost a race with the writer (code {Code})", e.SqliteErrorCode);
-
-            return;
-        }
-        // Nothing awaits this Task, so without this an escaping exception is
-        // simply lost: no message, no crash, a screen that quietly stops
-        // updating.
-        catch (Exception e)
-        {
-            Log.LogError(e, "summary re-read failed");
-
-            return;
-        }
-
-        StateHasChanged();
     });
 
     // Load-bearing, not cleanup for its own sake: these services are singletons

@@ -1,5 +1,4 @@
 @page "/"
-@using Microsoft.Data.Sqlite
 @using Microsoft.Extensions.Logging
 @implements IDisposable
 @inject ILibraryQuery Library
@@ -66,30 +65,10 @@
     // user's cursor five times a second is worse than being briefly stale.
     private void HandleLibraryChanged() => InvokeAsync(() =>
     {
-        try
+        if (ChangeHandlerGuard.Reread(Log, "queue", () => _queue = Library.GetQueue(Clock.Now)))
         {
-            _queue = Library.GetQueue(Clock.Now);
+            Refresh();
         }
-        // SQLITE_BUSY and SQLITE_LOCKED only — the race against a sync that has
-        // just finished writing. Any other code is a real failure and must not
-        // be swallowed forever behind stale data.
-        catch (SqliteException e) when (e.SqliteErrorCode is 5 or 6)
-        {
-            Log.LogWarning(e, "queue re-read lost a race with the writer (code {Code})", e.SqliteErrorCode);
-
-            return;
-        }
-        // Nothing awaits this Task, so without this an escaping exception is
-        // simply lost: no message, no crash, a screen that quietly stops
-        // updating.
-        catch (Exception e)
-        {
-            Log.LogError(e, "queue re-read failed");
-
-            return;
-        }
-
-        Refresh();
     });
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
