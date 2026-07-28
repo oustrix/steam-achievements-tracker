@@ -20,11 +20,16 @@
 
   <ItemGroup>
     <!--
-      Console logging for a tool whose whole job is to say what the sync
-      engine did. Core brings the abstractions transitively; this is the
-      console provider and the factory.
+      LoggerFactory and ILoggingBuilder (SetMinimumLevel, AddProvider) for a
+      tool whose whole job is to say what the sync engine did. Core brings
+      only Microsoft.Extensions.Logging.Abstractions transitively, which has
+      the ILogger<T> interfaces but not the concrete factory. Not
+      Microsoft.Extensions.Logging.Console: its AddSimpleConsole formats but
+      does not scrub, which would print a real Steam Web API key to stdout on
+      every request. Diagnostics.ConsoleLogProvider is Core's own console
+      sink, sharing the file sink's Redaction.Scrub step by construction.
     -->
-    <PackageReference Include="Microsoft.Extensions.Logging.Console" Version="10.0.10" />
+    <PackageReference Include="Microsoft.Extensions.Logging" Version="10.0.10" />
   </ItemGroup>
 
 </Project>

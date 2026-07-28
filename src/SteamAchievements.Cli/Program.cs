@@ -43,10 +43,16 @@ if (steamId is null)
 var dbPath = options.DbPath ?? Path.Combine(Path.GetTempPath(), "steam-achievements-tracker.db");
 Console.WriteLine($"Database: {dbPath}");
 
-// Debug, because this tool exists for the runs that go wrong.
+// Debug, because this tool exists for the runs that go wrong. ConsoleLogProvider,
+// not the stock AddSimpleConsole: this process holds a real Steam Web API key
+// (from --key or STEAM_API_KEY), LoggingHandler below logs every request URL
+// at Debug, and that URL carries the key in its query string. The stock
+// console provider formats but does not scrub, which would print the key to
+// stdout on every request; ConsoleLogProvider runs it through the same
+// Redaction.Scrub the file sink uses, by construction rather than by remembering.
 using var loggers = LoggerFactory.Create(builder => builder
     .SetMinimumLevel(LogLevel.Debug)
-    .AddSimpleConsole(console => console.SingleLine = true));
+    .AddProvider(new ConsoleLogProvider(() => DateTimeOffset.UtcNow)));
 
 using var connection = Database.Open(dbPath);
 var repository = new GameRepository(connection);
@@ -60,8 +66,12 @@ var repository = new GameRepository(connection);
 var innerHandler = new HttpClientHandler();
 var countingHandler = new RequestCountingHandler(innerHandler);
 
-// Outside the counting handler so its own retries are counted once and logged
-// once. HttpClient owns and disposes the whole chain.
+// Outside RequestCountingHandler (rather than inside it) so the elapsed time
+// LoggingHandler measures — it brackets its Stopwatch around base.SendAsync —
+// covers everything beneath it in the chain, including RequestCountingHandler's
+// own bookkeeping, not just the network hop underneath that. RequestCountingHandler
+// has no retry logic of its own to worry about here; it only increments a
+// counter once per SendAsync call.
 var loggingHandler = new LoggingHandler(loggers.CreateLogger<LoggingHandler>())
 {
     InnerHandler = countingHandler,

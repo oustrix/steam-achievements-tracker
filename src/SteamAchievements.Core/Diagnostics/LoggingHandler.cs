@@ -12,9 +12,16 @@ namespace SteamAchievements.Core.Diagnostics;
 /// handler makes this testable without a network.
 ///
 /// The URL carries the API key in its query string. Nothing is stripped here
-/// on purpose — <see cref="Redaction"/> runs inside the writer, so a URL
-/// logged from anywhere else is covered by the same rule rather than by a
-/// second copy of it that can drift.
+/// on purpose — <see cref="Redaction"/> runs inside every
+/// <see cref="TextLoggerProvider"/>-derived sink (the WPF host's rolling
+/// file, and the CLI's console), so a URL logged from anywhere else is
+/// covered by the same rule rather than by a second copy of it that can
+/// drift. That guarantee is structural, not a convention to remember: a
+/// logger built directly on a stock provider like
+/// <c>Microsoft.Extensions.Logging.Console</c> instead of
+/// <see cref="TextLoggerProvider"/> would bypass it entirely — which is
+/// exactly the gap a review of this file's first console caller found and
+/// closed.
 /// </summary>
 public sealed class LoggingHandler : DelegatingHandler
 {
