@@ -63,6 +63,23 @@ public class LogLineTests
     }
 
     [Fact]
+    public void DropsTheTrailingBlankLineWhenAnExceptionsMessageEndsInANewline()
+    {
+        // Constructed, not thrown: Exception.ToString() then has no stack
+        // trace after the message, so a trailing newline in the message would
+        // otherwise become a whitespace-only "    \r\n" line of its own.
+        var error = new InvalidOperationException("boom\n");
+
+        var formatted = LogLine.Format(At, LogLevel.Error, "X", "it failed", error);
+        var lines = formatted.Split("\r\n");
+
+        Assert.DoesNotContain(lines, line => line.Length > 0 && line.Trim().Length == 0);
+        Assert.Equal(string.Empty, lines[^1]);
+        Assert.EndsWith("\r\n", formatted);
+        Assert.False(formatted.EndsWith("\r\n\r\n"));
+    }
+
+    [Fact]
     public void ShortensANamespacedCategoryToItsLastSegment()
     {
         Assert.Equal("SyncCoordinator", LogLine.ShortCategory("SteamAchievements.Core.App.SyncCoordinator"));
@@ -72,5 +89,19 @@ public class LogLineTests
     public void LeavesACategoryWithNoNamespaceAlone()
     {
         Assert.Equal("Program", LogLine.ShortCategory("Program"));
+    }
+
+    [Fact]
+    public void LeavesAnEmptyCategoryAlone()
+    {
+        Assert.Equal(string.Empty, LogLine.ShortCategory(string.Empty));
+    }
+
+    [Fact]
+    public void ReturnsTheWholeCategoryWhenItEndsInADot()
+    {
+        // Shortening "Foo." would otherwise yield "", printing a blank field
+        // between two spaces — worse than showing the malformed name as-is.
+        Assert.Equal("Foo.", LogLine.ShortCategory("Foo."));
     }
 }
