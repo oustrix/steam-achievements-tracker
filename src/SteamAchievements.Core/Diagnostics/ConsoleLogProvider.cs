@@ -1,11 +1,11 @@
 namespace SteamAchievements.Core.Diagnostics;
 
 /// <summary>
-/// The console sink for <c>SteamAchievements.Cli</c> — format- and
-/// scrub-identical to <see cref="RollingFileLoggerProvider"/> by
-/// construction, since both derive from <see cref="TextLoggerProvider"/>,
-/// rather than by two authors keeping two copies of "format, then scrub" in
-/// step by hand.
+/// The console sink for <c>SteamAchievements.Cli</c> and
+/// <c>SteamAchievements.Preview</c> — format- and scrub-identical to
+/// <see cref="RollingFileLoggerProvider"/> by construction, since both derive
+/// from <see cref="TextLoggerProvider"/>, rather than by two authors keeping
+/// two copies of "format, then scrub" in step by hand.
 ///
 /// This exists because the stock <c>Microsoft.Extensions.Logging.Console</c>
 /// provider (<c>AddSimpleConsole</c>) does not scrub, and the CLI is exactly
@@ -16,6 +16,15 @@ namespace SteamAchievements.Core.Diagnostics;
 /// the key would land in terminal scrollback, in any redirected log file, and
 /// in CI output on every request. Routed through this one, the same
 /// <see cref="Redaction.Scrub"/> call the file sink uses runs first.
+///
+/// Writes to <see cref="Console.Error"/>, not <see cref="Console.Out"/>. The
+/// CLI renders its progress bar on stdout with a bare <c>Console.Write("\r" +
+/// ...)</c> — a partial line, no newline — while this provider writes whole
+/// lines from up to four worker threads during a sync. Interleaved on the
+/// same stream the two become unreadable, in exactly the runs the CLI exists
+/// for. Splitting them onto stdout and stderr keeps the progress display
+/// intact and lets <c>2&gt;run.log</c> capture the diagnostic stream cleanly
+/// on its own — which is what someone debugging a bad run actually wants.
 /// </summary>
 public sealed class ConsoleLogProvider : TextLoggerProvider
 {
@@ -23,16 +32,16 @@ public sealed class ConsoleLogProvider : TextLoggerProvider
 
     /// <summary>
     /// Guards <see cref="_console"/> rather than trusting it to serialize its
-    /// own writes. <see cref="Console.Out"/> happens to be thread-safe on its
-    /// own, but the internal constructor below exists so tests can substitute
-    /// a plain <see cref="StringWriter"/>, which is not — and
+    /// own writes. <see cref="Console.Error"/> happens to be thread-safe on
+    /// its own, but the internal constructor below exists so tests can
+    /// substitute a plain <see cref="StringWriter"/>, which is not — and
     /// <c>SyncOrchestrator</c> logs from concurrent HTTP work, so an
     /// unsynchronized writer would interleave two lines' bytes instead of
     /// ordering them one after another.
     /// </summary>
     private readonly Lock _gate = new();
 
-    public ConsoleLogProvider(Func<DateTimeOffset> now) : this(Console.Out, now)
+    public ConsoleLogProvider(Func<DateTimeOffset> now) : this(Console.Error, now)
     {
     }
 
