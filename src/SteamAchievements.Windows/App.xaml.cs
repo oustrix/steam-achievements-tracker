@@ -5,6 +5,7 @@ using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 using System.Windows;
+using Microsoft.AspNetCore.Components.WebView.Wpf;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -215,6 +216,25 @@ public partial class App : Application
             });
 
         var services = new ServiceCollection();
+
+        // Required by BlazorWebView to resolve IJSRuntime, INavigationInterception
+        // and IErrorBoundaryLogger. Without it, the window fails the moment
+        // MainWindow constructs the view — a placard's worth of nothing where
+        // the app should be. This call appeared in no commit in this
+        // repository's history until now; every Windows run before it would
+        // have hit that failure at the first BlazorWebView.
+        //
+        // Placed first, before the application's own registrations, on
+        // purpose: AddWpfBlazorWebView calls AddLogging() internally, which
+        // registers ILoggerFactory and ILogger<> with TryAdd — added only if
+        // nothing is registered for that service yet. Registering the
+        // explicit ILoggerFactory and ILogger<> below afterwards, with plain
+        // AddSingleton, still wins: a container resolves the last descriptor
+        // registered for a given service, and TryAdd's registrations lose to
+        // any later Add regardless of order otherwise. Confirmed by reading
+        // Microsoft.AspNetCore.Components.WebView.dll — AddLogging there is
+        // TryAdd/TryAddScoped throughout, never a plain Add.
+        services.AddWpfBlazorWebView();
 
         // The components and the Core services take ILogger<T>; this is what
         // makes it resolvable. Registered from the existing factory rather than
