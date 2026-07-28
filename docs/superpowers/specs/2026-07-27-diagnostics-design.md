@@ -328,13 +328,28 @@ the host: the log directory (`Environment.GetFolderPath`, already resolved by
 which are WPF and AppDomain events. Nothing else moves into
 `SteamAchievements.Windows`.
 
-`SteamAchievements.Preview` and `SteamAchievements.Cli` log to the console.
-Preview is a `WebApplication.CreateBuilder` host, so a console provider is
-already registered and all it needs is a `Debug` floor; the CLI builds a
-factory by hand. Preview matters because it means every call site added by this
-work is exercised on macOS rather than first executed on Windows; the CLI
-matters because it is the tool for isolating the engine from the UI, and it
-currently prints nothing about what the engine did.
+`SteamAchievements.Preview` and `SteamAchievements.Cli` log to the console
+through `ConsoleLogProvider`, the same shared path the file sink uses.
+
+This paragraph originally said Preview needed nothing but a `Debug` floor,
+because `WebApplication.CreateBuilder` registers a console provider already.
+The whole-branch review found why that is wrong: a stock provider does not go
+through `Redaction`, so it contradicts §2's structural rule, and — the reason
+it matters here rather than being merely untidy — Preview exists precisely so
+every call site this work adds is exercised on macOS. Against stock providers
+that macOS run never touches `LogLine.Format` or `Redaction.Scrub` at all, and
+the one host that could have caught the CLI's leaked-key defect would not have.
+So Preview clears the default providers and registers ours.
+
+The CLI writes to `Console.Error`, not `Console.Out`: it renders a progress
+line with a carriage return and no newline, and log lines from four worker
+threads on the same stream smear it into unreadability during exactly the runs
+the CLI exists for. Redirecting `2>` also gives a clean diagnostic capture.
+
+CI enforces this: a step fails the build if `AddConsole`, `AddSimpleConsole`,
+`AddJsonConsole`, `AddDebug`, `AddEventSourceLogger` or `AddEventLog` appears
+anywhere under `src/`. Three comments were the previous mitigation, and the
+defect they were written after had already shipped once.
 
 ## 6. Opening the log
 
@@ -445,6 +460,40 @@ Recorded from the execution ledger and `git log`, not from memory. Nine of the
 twelve implementation tasks needed at least one fix round after a review found
 something the plan or the first draft got wrong; three did not, and are
 recorded as such below rather than left silent.
+
+A tenth round followed all twelve, from the whole-branch review — the one the
+per-task reviews structurally could not perform, because each of them saw one
+task in isolation. It found three things that only exist between tasks, and one
+older than the branch:
+
+- **`SyncCoordinator.Start` still held `_gate` across the beginning of a run.**
+  Task 7 moved the log calls out of the lock and wrote comments saying so, but
+  `_completion = RunAsync(...)` stayed inside it — and `RunAsync` is `async`, so
+  it ran synchronously on the caller's thread up to its first real suspension
+  deep inside `HttpClient`. A DPAPI decrypt and a flushed disk write ran under
+  the lock; on the missing-key path, which throws before any await, so did two
+  SQLite writes, a stack-trace log and an event fan-out to all four screens.
+  `await Task.Yield()` now makes the lock cover assignment and nothing else.
+- **The CLI's log smeared its own progress display.** `ConsoleLogProvider` wrote
+  whole lines to `Console.Out` while the progress renderer wrote partial
+  carriage-return lines to the same stream. Neither Task 10's nor Task 11's
+  review could see it; the progress renderer predates both. Now on `stderr`.
+- **Preview bypassed the shared scrubbing path.** See §5, corrected in place.
+- **`AddWpfBlazorWebView()` had never been called, in any commit.**
+  `BlazorWebView` needs it to resolve `IJSRuntime`, `INavigationInterception`
+  and `IErrorBoundaryLogger`. Older than this branch and outside its scope, but
+  fixed here because without it the first Windows run shows a failure placard
+  and none of the evidence this design exists to produce is ever written.
+
+Also from that review: `RecordingLogger` recorded messages but discarded their
+level, so none of §4's level promises were verified by anything; three exception
+messages reached the user unscrubbed; and CI gained the grep guard §5 describes.
+
+Three residual nits were judged non-blocking and left: `ConsoleLogProvider`'s
+internal test-only constructor doc still names the wrong stream;
+`SyncCoordinator.AlertBody` is the one exception message deliberately not
+scrubbed and carries no comment saying so; and the CI guard's `|| true` also
+masks the case where `src/` has been renamed away.
 
 - **Task 1 — Redaction, rule 2.** §3.3 already carries this correction in
   place, so it is not repeated here: rule 2 was drafted matching uppercase hex
