@@ -190,6 +190,23 @@ public sealed class SyncCoordinator : ISyncPresenter, ISyncController, IDisposab
 
     private async Task RunAsync(ulong steamId, bool force, CancellationToken cancellationToken)
     {
+        // Must be the first statement. Start assigns `_completion = RunAsync(...)`
+        // while holding _gate, and an async method runs synchronously — on the
+        // caller's own thread, inside that lock — up to its first genuine
+        // suspension point. Without this yield, that point is deep inside
+        // HttpClient (or, on the missing-key path, never: LiveSyncRunner throws
+        // before any await, so the whole catch (SteamApiException ... InvalidKey)
+        // block below — two SQLite writes, a LogError with a full stack trace,
+        // and Publish fanning out through LibraryChangeSignal into all four
+        // screens — would also run under _gate). Any thread only trying to read
+        // Status or Completion would block behind all of it. Task.Yield()
+        // returns control to Start immediately, so the lock covers nothing more
+        // than the field assignments it was written for. Do not replace this
+        // with Task.Run: that would move the run off the caller's thread, a
+        // behaviour change on a host (the WPF renderer thread) nobody has
+        // executed yet.
+        await Task.Yield();
+
         var startedAt = _now();
         var kind = force ? "full" : "incremental";
         var completed = 0;
