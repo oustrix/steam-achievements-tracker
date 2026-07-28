@@ -89,6 +89,23 @@ internal sealed class RollingFileWriter : IDisposable
         _length = _stream.Length;
     }
 
+    /// <summary>
+    /// Shifts every rotated file up by one index and moves the current file
+    /// into the vacated <c>.1</c> slot. Requires <c>MaxFiles &gt;= 2</c>, which
+    /// <see cref="LogFileOptions"/> now enforces at construction — with fewer
+    /// than two files there is no <c>.1</c> slot to move the current file
+    /// into without colliding with a file this method never deletes.
+    ///
+    /// Order matters in both halves:
+    /// <list type="number">
+    /// <item>The true oldest file (index <c>MaxFiles - 1</c>) is deleted
+    /// first, so it does not linger once nothing points at it.</item>
+    /// <item>The shift then runs from the highest index down to 1, so each
+    /// destination is vacated (moved out of) before anything moves into it —
+    /// running it the other way would overwrite a file before it had been
+    /// moved, silently dropping it instead of aging it out.</item>
+    /// </list>
+    /// </summary>
     private void Rotate()
     {
         Close();
