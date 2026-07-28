@@ -6,6 +6,17 @@ using SteamAchievements.UI.State;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// The Debug-level lines this host needs to prove out (AppShell.Guard's
+// "staying put" line, for one) come from appsettings.json/
+// appsettings.Development.json setting Logging:LogLevel:Default to Debug,
+// not from anything here. builder.Logging.SetMinimumLevel(LogLevel.Debug)
+// was tried and measured to do nothing: it only sets LoggerFilterOptions's
+// MinLevel, which is a fallback used solely when no LoggerFilterRule
+// matches a given log call. Both appsettings files always contribute a
+// "Default" rule, so that fallback is never reached and the configured
+// level always wins. Microsoft.AspNetCore's own noise is capped at
+// Warning by the same config section, which predates this change and
+// needed no code-side AddFilter to match it.
 builder.Services.AddRazorComponents().AddInteractiveServerComponents();
 
 // One fixture query per browser session, so the scenario switch in the query

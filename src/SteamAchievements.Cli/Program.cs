@@ -1,6 +1,8 @@
 using System.Diagnostics;
+using Microsoft.Extensions.Logging;
 using SteamAchievements.Core.Abstractions;
 using SteamAchievements.Core.Data;
+using SteamAchievements.Core.Diagnostics;
 using SteamAchievements.Core.Local;
 using SteamAchievements.Core.Steam;
 using SteamAchievements.Core.Sync;
@@ -41,21 +43,35 @@ if (steamId is null)
 var dbPath = options.DbPath ?? Path.Combine(Path.GetTempPath(), "steam-achievements-tracker.db");
 Console.WriteLine($"Database: {dbPath}");
 
+// Debug, because this tool exists for the runs that go wrong.
+using var loggers = LoggerFactory.Create(builder => builder
+    .SetMinimumLevel(LogLevel.Debug)
+    .AddSimpleConsole(console => console.SingleLine = true));
+
 using var connection = Database.Open(dbPath);
 var repository = new GameRepository(connection);
 
 // Chain: innerHandler does the real HTTP work; countingHandler wraps it to
-// track request volume cheaply; fixtureHandler (optional) wraps that to
-// capture anonymized bodies. HttpClient owns and disposes the whole chain —
-// DelegatingHandler.Dispose cascades to InnerHandler, so only the outermost
-// handler needs to reach the HttpClient constructor.
+// track request volume cheaply; loggingHandler wraps that to record every
+// request; fixtureHandler (optional) wraps that to capture anonymized
+// bodies. HttpClient owns and disposes the whole chain — DelegatingHandler.
+// Dispose cascades to InnerHandler, so only the outermost handler needs to
+// reach the HttpClient constructor.
 var innerHandler = new HttpClientHandler();
 var countingHandler = new RequestCountingHandler(innerHandler);
-HttpMessageHandler outermostHandler = countingHandler;
+
+// Outside the counting handler so its own retries are counted once and logged
+// once. HttpClient owns and disposes the whole chain.
+var loggingHandler = new LoggingHandler(loggers.CreateLogger<LoggingHandler>())
+{
+    InnerHandler = countingHandler,
+};
+
+HttpMessageHandler outermostHandler = loggingHandler;
 
 if (options.DumpFixturesDir is not null)
 {
-    outermostHandler = new FixtureCapturingHandler(countingHandler, options.DumpFixturesDir, apiKey, steamId.Value.ToString());
+    outermostHandler = new FixtureCapturingHandler(loggingHandler, options.DumpFixturesDir, apiKey, steamId.Value.ToString());
     Console.WriteLine($"Dumping anonymized fixtures to: {options.DumpFixturesDir}");
 }
 
@@ -66,12 +82,9 @@ using var http = new HttpClient(outermostHandler)
 
 var client = new SteamApiClient(http, apiKey);
 
-// A real logger factory arrives with the rest of the CLI's diagnostics wiring;
-// until then, a null logger keeps this compiling without silently becoming the
-// production default (the constructor parameter itself is still required).
 var orchestrator = new SyncOrchestrator(
     client, repository, SyncOptions.Default,
-    Microsoft.Extensions.Logging.Abstractions.NullLogger<SyncOrchestrator>.Instance);
+    loggers.CreateLogger<SyncOrchestrator>());
 
 using var cts = new CancellationTokenSource();
 Console.CancelKeyPress += (_, e) =>
