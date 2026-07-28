@@ -42,14 +42,45 @@ public sealed class LoggingHandler : DelegatingHandler
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
-            // SyncCoordinator.Pause cancels the run's token, and
-            // SyncOrchestrator drives several requests concurrently, so one
-            // deliberate pause would otherwise write a burst of ERR lines --
-            // indistinguishable from several real transport failures in the
-            // one artifact meant to make the first real failure obvious. A
-            // cancelled request is neither a status Steam returned nor a
-            // transport failure, so it gets its own line at the same level
-            // as success.
+            // Cannot tell a deliberate pause from a genuine HttpClient timeout
+            // here, and that is not an oversight -- it is what this position
+            // in the pipeline can see. HttpClient.SendAsyncCore never hands
+            // the handler chain the caller's own token: it links it with an
+            // internal CancellationTokenSource that HttpClient.Timeout also
+            // cancels, and passes that linked token's own Token down through
+            // base.SendAsync. So SyncCoordinator.Pause() cancelling the run's
+            // token and Steam simply taking longer than HttpClient.Timeout
+            // both surface at this catch as the identical exception, against
+            // the identical (already-cancelled) token -- there is no local
+            // signal left here to tell them apart.
+            //
+            // Consequently both are logged at Debug, and a real timeout is
+            // undercounted at this level: it never gets its own ERR line.
+            // That is not lost information, only relocated. The layer that
+            // still holds the caller's real, unlinked token is one frame up,
+            // in SteamApiClient.GetJsonAsync, which calls _http.GetAsync with
+            // that token *before* HttpClient does its own linking. Its
+            // "catch (TaskCanceledException)" branch is where a timeout
+            // becomes SteamApiException(SteamApiErrorKind.ServerError, ...)
+            // -- transient, and retried. That branch is reached only when the
+            // preceding "catch (OperationCanceledException) when
+            // (cancellationToken.IsCancellationRequested)" in the same method
+            // evaluates false, which is the opposite of this one: two
+            // visually identical guards, a few frames apart, one meaningful
+            // and one not. GetJsonAsync's guard answers a real question,
+            // because the token it inspects is still the caller's own,
+            // untouched by HttpClient. This guard cannot, because by the time
+            // control reaches here HttpClient has already replaced that
+            // token with the linked one described above. This handler only
+            // records that a request ended, not why; deciding what the end
+            // meant is SteamApiClient's job, not this one's.
+            //
+            // The guard is kept anyway, even though it can never evaluate
+            // false at this position, because dropping it would make this
+            // catch read as deliberately swallowing every
+            // OperationCanceledException regardless of cause -- which is not
+            // what is happening, even if the two causes end up indistinguishable
+            // here.
             _log.LogDebug(
                 "{Method} {Url} -> cancelled after {Elapsed}ms", request.Method.Method, url, Elapsed(started));
             throw;
