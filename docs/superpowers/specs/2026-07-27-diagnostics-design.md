@@ -441,4 +441,133 @@ a line.
 
 ## 10. Divergences from this spec during implementation
 
-To be recorded during execution rather than reconstructed afterwards.
+Recorded from the execution ledger and `git log`, not from memory. Nine of the
+twelve implementation tasks needed at least one fix round after a review found
+something the plan or the first draft got wrong; three did not, and are
+recorded as such below rather than left silent.
+
+- **Task 1 — Redaction, rule 2.** §3.3 already carries this correction in
+  place, so it is not repeated here: rule 2 was drafted matching uppercase hex
+  only, on the reasoning that the 40-character SHA-1 hashes in icon URLs are
+  lowercase. Review found that `ApiKey` only normalises case on the onboarding
+  path, so a key typed in lowercase and given to `SteamAchievements.Cli`
+  through `--key` or `STEAM_API_KEY` would have reached a log line unmasked.
+  Fixed to match both cases (commits ad141f2..ef94eaa).
+
+- **Task 2 — `LogLine` formatting.** Two edge cases the design's pure-function
+  framing didn't anticipate: a stray whitespace-only line appeared in the
+  exception block for an exception whose `Message` ends in a newline, and
+  `ShortCategory` was undefined on an empty category or one ending in a dot
+  (commits 733afe5..546184f). Both are now covered by §3.2's
+  trim-before-split rule and the empty-segment guard. Deferred, not fixed: a
+  message containing an embedded newline still becomes several physical lines
+  with no continuation marker — caller discipline, out of scope for this task.
+
+- **Task 3 — `LogFileOptions` validation.** The design's record in §3.1 had no
+  validation at all. Review found that `MaxFiles` of 0 or 1 doesn't fail
+  loudly — it degrades into a permanently disabled writer on the *second*
+  rotation of a long sync, which is exactly the silent failure this whole
+  feature exists to catch elsewhere. Fixed by validating `MaxFiles >= 2` at
+  construction (commits 207c03e..4980850). Deferred, not fixed:
+  `RollingFileWriter.Dispose` doesn't latch a disposed flag, so a `Write` after
+  `Dispose` would silently reopen the file (unreachable under today's
+  single-owner usage); `LogFileOptions`'s validation runs through property
+  initializers, so a `with { MaxFiles = 0 }` expression would bypass it (no
+  caller uses `with` today).
+
+- **Task 4 — `RollingFileLoggerProvider`.** Task 3's first deferred minor
+  above was promoted to an Important finding here: wrapping the writer in an
+  `ILoggerProvider` the host registers in DI made write-after-dispose
+  reachable, because shutdown disposal can race a component still holding an
+  injected `ILogger<T>`. Guarded in the provider (commits a3ae31f..58af3f9).
+  Two more addressed in the same round: a test asserted only that something
+  was absent rather than what was present, and `Log` invoked its formatter
+  delegate without checking it first. Judged benign on re-review: `_disposed`
+  is a `volatile bool` rather than lock-guarded, because the alternative is
+  locking every log call to avoid one stray line at the exact moment the
+  process is exiting and the OS is about to reclaim the handle anyway.
+
+- **Task 5 — `LoggingHandler` and cancellation.** One deliberate pause was
+  logging four ERR lines with stack traces, because the handler's catch
+  couldn't distinguish a caller's cancellation from an `HttpClient` timeout and
+  was treating both as a transport failure (commits 58af3f9..6145a77). The
+  underlying fact — that this distinction is structurally impossible at that
+  point in the pipeline — is recorded in CLAUDE.md's "Facts learned the hard
+  way" rather than here, because it outlived the task that found it. A second,
+  smaller round followed: the catch's own comment claimed a distinction the
+  code cannot make, and was corrected to say so (commit f397756).
+
+- **Task 6 — call-site tests.** No fix round. The one thing the reviewer
+  flagged as unverifiable — a `using (BeginScope())` where `BeginScope`
+  returns a no-op — resolved without a code change: `RollingFileLoggerProvider`
+  returns a non-null `NullScope`, and `using (null)` is legal C# regardless, so
+  there was nothing to fix.
+
+- **Task 7 — sync call sites.** Review found new log calls sitting inside
+  `SyncCoordinator`'s `_gate`, which would let a synchronous disk write block a
+  UI thread that only wanted to read `Status`. Moved outside the lock (commits
+  df0b9aa..f75f1ab) — this is why §4.4's logging happens where it does rather
+  than wherever felt natural while writing the method. A test name also
+  claimed a class-wide property it didn't check. Deferred, not fixed: per-game
+  `LogDebug` runs roughly 1500 times per sync from four workers; harmless at an
+  `Information` floor because `Microsoft.Extensions.Logging` short-circuits
+  before formatting, but this design sets the floor to Trace/Debug
+  deliberately, so the cost is real. Its measured impact is unknown until the
+  Windows run — watch it on the first-run pass.
+
+- **Task 8 — the two reset operations.** No fix round in Task 8 itself, but it
+  left the repository in a knowingly broken state on purpose:
+  `src/SteamAchievements.Windows/App.xaml.cs` still called
+  `new SqliteLibraryReset(settings)` with the pre-diagnostics one-argument
+  constructor after `SqliteLibraryReset` gained a required `ILogger` parameter,
+  so the Windows project did not compile between Tasks 8 and 12. This was
+  known and accepted rather than a defect found in review — Task 12 carries
+  the corrected registration, and the branch was not pushed to CI in between.
+
+- **Task 9 — opening the log and the data folder.** No fix round; one recorded
+  gap instead. The browser click-through in §6 could not be run: the Chrome
+  extension was not connected in this environment for either the implementer
+  or the controller. Verified instead that the rendered `/settings` HTML
+  carries both buttons and the expected CSS class, and that `FixtureLinks`'s
+  handling of `OpenLogFile` follows the same path `OpenDataFolder` already
+  used. The click itself is on `docs/windows-first-run.md` regardless.
+
+- **Task 10 — the preview host's console sink.** No fix round; this task
+  surfaced the finding that shaped Task 11 instead of causing one of its own.
+  `SteamAchievements.Preview` carries `appsettings.json` and
+  `appsettings.Development.json`, both setting `Logging:LogLevel:Default` to
+  `Information`, while the plan's own `builder.Logging.SetMinimumLevel(Debug)`
+  call does nothing in the presence of that configuration (see CLAUDE.md's
+  fact on `SetMinimumLevel`). Task 11 had to verify the Debug lines actually
+  appeared rather than assume the call worked.
+
+- **Task 11 — the CLI's console sink.** §2 already carries this correction in
+  place, so it is not repeated here: this was the CRITICAL finding of the
+  branch. The CLI's `AddSimpleConsole` printed the real Steam API key to
+  stdout on every request, because `Redaction.Scrub` had exactly one caller —
+  the file provider — so "redaction is unskippable" held only for that one
+  sink. Fixed structurally rather than by adding a second call site:
+  `TextLoggerProvider` is now the shared base every provider inherits, with a
+  private `Write` that composes formatting and scrubbing once (commits
+  9a25061..1f41ef0). A second, smaller finding in the same round: a comment
+  claimed retries that don't exist. Residual, documented rather than closed:
+  nothing stops a future `ILoggerProvider` from not inheriting
+  `TextLoggerProvider` — the invariant is reduced from "remember to scrub" to
+  "remember to inherit," not eliminated.
+
+- **Task 12 — shutdown.** Pushed to CI at 640a51b and came back green on
+  `test`, `build-windows` and `build-cli` — the Windows project compiles again
+  now that the constructor mismatch from Task 8 is resolved. Review then found
+  three things in `App.xaml.cs`'s shutdown path: the `OnExit` stages (disposing
+  services, closing connections, disposing the logger factory) could skip each
+  other if one threw; the crash dialog had no bound, so a dispatcher exception
+  recurring every frame would reshow a modal on every tick; and a
+  nullable-logger pattern type-checked only by accident. All three fixed
+  (commits 640a51b..27fe733); CI came back green a second time with zero
+  compiler warnings. Deferred, not fixed: inside `OnExit`'s connection-closing
+  loop, a throw on one connection leaves the rest un-disposed — the finding was
+  that the three *stages* had to be independent of each other, not that every
+  connection close needed its own try/catch, and the fix matches that scope.
+  Pre-existing and out of scope either way: the two `HttpClient`s built in
+  `Compose` are never disposed at exit, which predates this branch and is
+  reclaimed by process exit regardless.
