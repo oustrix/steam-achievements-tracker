@@ -59,12 +59,25 @@ reproducible on a second run with a flag set. `LogLevel` appears in each line
 so the file can be filtered by eye or by `findstr`, but nothing is dropped.
 Raising the floor to `Information` later is a one-line change.
 
-**Redaction happens inside the writer, not at call sites.** A scrubber you have
-to remember to call is a scrubber that leaks. Steam's request URLs carry
+**Redaction happens inside the provider, not at call sites.** A scrubber you
+have to remember to call is a scrubber that leaks. Steam's request URLs carry
 `key=<32 hex characters>` in the query string, and `SteamApiException` messages
 carry those URLs, so the secret can reach the log through paths nobody
 inspected. Every formatted line, including the exception block, passes through
 `Redaction.Scrub` before it is written.
+
+That sentence was originally written as "inside the writer", and the difference
+is not cosmetic. Review of Task 11 found the hole: the invariant held only for
+the one provider that happened to call `Scrub`, and the moment the CLI was
+given a second sink — `AddSimpleConsole`, a stock Microsoft provider that knows
+nothing about redaction — it printed the real API key to stdout on every Steam
+request. "Remember to call the scrubber" had simply moved up a layer, from the
+call site to the provider author.
+
+So the rule is structural, not a convention: **formatting and scrubbing live in
+one shared path that every provider in this application goes through**, and a
+provider supplies only its destination. A sink that bypasses that path is a
+credential leak, and `SteamAchievements.Core.Diagnostics` must not offer one.
 
 **Loggers are required constructor parameters, never optional.** An optional
 logger that defaults to `NullLogger` turns "the host forgot to wire it up" into
