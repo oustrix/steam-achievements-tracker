@@ -109,7 +109,25 @@ placeholders like `{Elapsed}` become numbers; everything else matches).
       `log.3.txt` (four files, eight megabytes, by default).
 - [ ] A forced crash — End Task — leaves the last line intact rather than
       truncated. Every write flushes immediately, so this should hold
-      regardless of when the crash lands.
+      regardless of when the crash lands. `FileStream.Flush()` only pushes
+      bytes to the OS's file cache, not to the physical disk, so this covers
+      End Task and an unhandled exception — the process dying while the OS
+      keeps running — not a power loss. A pulled plug can still lose the last
+      buffered write; nothing here claims otherwise.
+- [ ] **A rotation that fails because a viewer holds the file open.** Renaming
+      a file on Windows needs delete-share permission from every other open
+      handle, and most editors and viewers do not request it — so opening
+      `log.txt` in one while a rotation boundary is crossed makes `Rotate`'s
+      `File.Move` throw. `RollingFileWriter` catches that, sets `Disabled`,
+      and never retries — logging must never be the reason the application
+      stalls or fails to start, so this is by design, not a bug to fix here.
+      What that looks like from outside: **the log simply stops growing.**
+      There is no error dialog, no line in the file saying so (the writer
+      that would write it is the one that is now off), and `Disabled` has no
+      visible indicator anywhere in the application. Reproduce it
+      deliberately — hold `log.txt` open in another program across a
+      rotation boundary — and confirm the silence yourself before assuming a
+      quiet log means a quiet sync.
 
 ## Known gaps, so they are not reported as bugs
 
