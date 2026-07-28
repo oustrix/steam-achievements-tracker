@@ -9,6 +9,13 @@
   <ItemGroup>
     <PackageReference Include="Dapper" Version="2.1.79" />
     <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.10" />
+    <!--
+      The seam for logging. Not a bespoke ILog: the .NET convention is that
+      libraries accept ILogger<T>, and this package is already in the WPF
+      host's restored graph via Microsoft.AspNetCore.Components.WebView.Wpf,
+      so referencing it here adds nothing to the published artifact.
+    -->
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.10" />
     <PackageReference Include="Polly" Version="8.7.0" />
     <!--
       Microsoft.Data.Sqlite 10.0.10 (the latest stable release) pins
