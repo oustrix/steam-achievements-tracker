@@ -81,16 +81,23 @@ developed and verified on macOS through `SteamAchievements.Preview`, a
 development-only Blazor Server host that renders the same components against
 fixtures — `dotnet run --project src/SteamAchievements.Preview`, then
 http://localhost:5100. Error and empty states are reachable there through
-`?scenario=empty|invalid-key|private-profile|rarity-unknown|other-account`.
+`?scenario=normal|empty|invalid-key|private-profile|rarity-unknown|other-account|circuit-open|first-run`.
+`first-run` is the only way to see `AppShell`'s onboarding guard on macOS.
 
 `SteamAchievements.Windows` is the real host: a WPF window with a
 `BlazorWebView`, plus the four Windows-only classes — registry, DPAPI, shell,
 WebView2 probe. Data lives in `%LOCALAPPDATA%\SteamAchievementsTracker\`:
-`library.db` and `apikey.bin`.
+`library.db`, `apikey.bin` and `log.txt`.
 
-Not wired yet: the buttons on the sync, settings and onboarding screens. The
-services behind them exist and are tested (`ISyncController`, `IOnboarding`,
-`IAccountAdmin`); binding the components to them is the next task.
+Every screen is wired to its service: `ISyncController`, `IOnboarding` and
+`IAccountAdmin` are reachable from the sync, onboarding and settings screens.
+
+Logging goes through `ILogger<T>`. The file sink lives in `Core/Diagnostics`
+and writes `log.txt` beside `library.db`, rotating at 2 MB across four files.
+Nothing is filtered: the application has never run on Windows, and the first
+failure has to be in the file already. Redaction is structural, not a
+call-site convention — see the fact below on `TextLoggerProvider`.
+`docs/windows-first-run.md` is the checklist for that first run.
 
 ## Facts learned the hard way
 
@@ -156,6 +163,34 @@ These cost real debugging time. Do not rediscover them.
   whole state machine in the WPF project. `SyncPhase` says what is happening,
   `SyncProblem` says what is blocking, and they are deliberately separate — a
   rejected key leaves the sync idle *and* blocked.
+- **A `DelegatingHandler` cannot tell a caller's cancellation from an
+  `HttpClient` timeout.** `HttpClient` never passes the caller's token down the
+  handler pipeline; it links it into an internal token it also cancels when its
+  own `Timeout` elapses, so a `catch (OperationCanceledException) when
+  (token.IsCancellationRequested)` in a handler is true either way and can
+  never evaluate false at that position — established by probe, not from
+  memory. The same guard one layer up, in `SteamApiClient.GetJsonAsync`, does
+  discriminate, because there the token is still the caller's own, untouched by
+  `HttpClient`. `LoggingHandler` logs both cases at Debug for exactly this
+  reason.
+- **`builder.Logging.SetMinimumLevel()` is a no-op in a host with an
+  `appsettings.json`.** It only sets `LoggerFilterOptions.MinLevel`, the
+  fallback used when no `LoggerFilterRule` matches — and any
+  `Logging:LogLevel:Default` entry in configuration always contributes a rule,
+  which always wins. Measured, not assumed: `SteamAchievements.Preview`'s
+  Debug floor lives in `appsettings.json` and `appsettings.Development.json`,
+  not in the `SetMinimumLevel` call that looks like it sets it.
+- **`Redaction.Scrub` must be reachable from exactly one shared path that every
+  logger provider goes through, not called at each provider's write site.**
+  When it had a single caller, the invariant "nothing unredacted reaches a
+  sink" held only for that one sink — and the moment the CLI got a second one,
+  a stock `AddSimpleConsole`, it printed the real Steam API key to stdout on
+  every request, because that provider knows nothing about `Redaction`. The
+  fix is structural: `TextLoggerProvider` is an abstract base whose private
+  `Write` composes `LogLine.Format` and `Redaction.Scrub` once, in that order;
+  `RollingFileLoggerProvider` and `ConsoleLogProvider` are both thin
+  subclasses that supply only a destination and inherit the invariant rather
+  than having to remember it.
 
 ## Reviewing your own plans
 

@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging;
 using SteamAchievements.Core.Data;
 using SteamAchievements.Core.Presentation;
 using SteamAchievements.Core.Steam;
@@ -33,6 +34,7 @@ public sealed class SyncCoordinator : ISyncPresenter, ISyncController, IDisposab
     private readonly IAccountStore _accounts;
     private readonly SyncJournal _journal;
     private readonly Func<DateTimeOffset> _now;
+    private readonly ILogger<SyncCoordinator> _log;
     private readonly Lock _gate = new();
 
     private CancellationTokenSource? _cancellation;
@@ -46,12 +48,17 @@ public sealed class SyncCoordinator : ISyncPresenter, ISyncController, IDisposab
     private Task _completion = Task.CompletedTask;
 
     public SyncCoordinator(
-        ISyncRunner runner, IAccountStore accounts, SyncJournal journal, Func<DateTimeOffset> now)
+        ISyncRunner runner,
+        IAccountStore accounts,
+        SyncJournal journal,
+        Func<DateTimeOffset> now,
+        ILogger<SyncCoordinator> log)
     {
         _runner = runner;
         _accounts = accounts;
         _journal = journal;
         _now = now;
+        _log = log;
 
         // A key rejected during an earlier session is still rejected now. The
         // flag is persisted precisely so a restart does not hide it and spend
@@ -59,6 +66,13 @@ public sealed class SyncCoordinator : ISyncPresenter, ISyncController, IDisposab
         _status = _accounts.KeyRejectedAt is not null
             ? SyncStatusView.Idle with { Problem = SyncProblem.InvalidKey }
             : SyncStatusView.Idle;
+
+        if (_accounts.KeyRejectedAt is not null)
+        {
+            _log.LogWarning(
+                "starting with a key Steam rejected at {RejectedAt}; syncing is blocked until it is replaced",
+                _accounts.KeyRejectedAt);
+        }
     }
 
     public SyncStatusView Status
@@ -104,11 +118,15 @@ public sealed class SyncCoordinator : ISyncPresenter, ISyncController, IDisposab
                 AlertTitle = "No Steam account is configured",
                 AlertBody = "Finish onboarding before syncing.",
             });
+            _log.LogWarning("sync requested with no Steam account configured");
             return;
         }
 
         lock (_gate)
         {
+            // A lock's body lowers to a try/finally, so returning from inside
+            // it still releases _gate — there is no bare-flag dance needed to
+            // carry the "already running" no-op past the closing brace.
             if (_status.Phase == SyncPhase.Running)
             {
                 return;
@@ -119,6 +137,13 @@ public sealed class SyncCoordinator : ISyncPresenter, ISyncController, IDisposab
             _status = SyncStatusView.Idle with { Phase = SyncPhase.Running };
             _completion = RunAsync(account.SteamId64, force, _cancellation.Token);
         }
+
+        // Logged outside the lock for the same reason Publish raises outside
+        // it: the file sink flushes synchronously and rotates with several
+        // File.Move calls, so logging under _gate would let a disk write
+        // block a UI thread that is only trying to read Status or Completion.
+        _log.LogInformation(
+            "sync started steam_id={SteamId} force={Force}", account.SteamId64, force);
 
         Changed?.Invoke();
     }
@@ -131,6 +156,10 @@ public sealed class SyncCoordinator : ISyncPresenter, ISyncController, IDisposab
     {
         lock (_gate)
         {
+            // Same shape as Start: a lock's body lowers to a try/finally, so
+            // returning from inside it for the no-op case still releases
+            // _gate, with no flag needed to smuggle the outcome past the
+            // closing brace.
             if (_status.Phase != SyncPhase.Running)
             {
                 return;
@@ -139,10 +168,35 @@ public sealed class SyncCoordinator : ISyncPresenter, ISyncController, IDisposab
             _pausing = pausing;
             _cancellation?.Cancel();
         }
+
+        // Reached only when the stop actually took effect — the no-op case
+        // returned above — and outside the lock for the same reason as in
+        // Start: a "requested" line that fired every call, including the
+        // no-ops, would be one thing, but logging under _gate at all risks
+        // blocking a reader of Status or Completion behind the sink's
+        // synchronous disk write.
+        _log.LogInformation("sync {Action} requested", pausing ? "pause" : "cancel");
     }
 
     private async Task RunAsync(ulong steamId, bool force, CancellationToken cancellationToken)
     {
+        // Must be the first statement. Start assigns `_completion = RunAsync(...)`
+        // while holding _gate, and an async method runs synchronously — on the
+        // caller's own thread, inside that lock — up to its first genuine
+        // suspension point. Without this yield, that point is deep inside
+        // HttpClient (or, on the missing-key path, never: LiveSyncRunner throws
+        // before any await, so the whole catch (SteamApiException ... InvalidKey)
+        // block below — two SQLite writes, a LogError with a full stack trace,
+        // and Publish fanning out through LibraryChangeSignal into all four
+        // screens — would also run under _gate). Any thread only trying to read
+        // Status or Completion would block behind all of it. Task.Yield()
+        // returns control to Start immediately, so the lock covers nothing more
+        // than the field assignments it was written for. Do not replace this
+        // with Task.Run: that would move the run off the caller's thread, a
+        // behaviour change on a host (the WPF renderer thread) nobody has
+        // executed yet.
+        await Task.Yield();
+
         var startedAt = _now();
         var kind = force ? "full" : "incremental";
         var completed = 0;
@@ -170,12 +224,18 @@ public sealed class SyncCoordinator : ISyncPresenter, ISyncController, IDisposab
             _accounts.ClearKeyRejected();
             Record(startedAt, finishedAt, kind, completed, error: null);
             _journal.MarkSyncCompleted(finishedAt);
+            _log.LogInformation(
+                "sync completed games={Completed} in {Elapsed}ms",
+                completed, (long)(finishedAt - startedAt).TotalMilliseconds);
 
             Publish(SyncStatusView.Idle);
         }
         catch (OperationCanceledException)
         {
             Record(startedAt, _now(), kind, completed, SyncRunView.CancelledMarker);
+            _log.LogInformation(
+                "sync {Outcome} after {Completed} of {Total} games",
+                _pausing ? "paused" : "cancelled", completed, total);
 
             // Paused keeps the figures on screen so it is clear where to resume
             // from; cancelled returns to a clean idle.
@@ -193,6 +253,7 @@ public sealed class SyncCoordinator : ISyncPresenter, ISyncController, IDisposab
             var finishedAt = _now();
             _accounts.MarkKeyRejected(finishedAt);
             Record(startedAt, finishedAt, kind, completed, e.Message);
+            _log.LogError(e, "sync stopped: Steam rejected the API key");
 
             // A rejected key is a blocking condition rather than a failed run:
             // retrying changes nothing until the key is replaced, and the screen
@@ -207,6 +268,7 @@ public sealed class SyncCoordinator : ISyncPresenter, ISyncController, IDisposab
         catch (Exception e)
         {
             Record(startedAt, _now(), kind, completed, e.Message);
+            _log.LogError(e, "sync failed after {Completed} of {Total} games", completed, total);
 
             Publish(SyncStatusView.Idle with
             {
@@ -233,6 +295,12 @@ public sealed class SyncCoordinator : ISyncPresenter, ISyncController, IDisposab
     /// <summary>
     /// Assigns under the lock and raises outside it. Raising while holding the
     /// lock would let a handler that reads <see cref="Status"/> re-enter it.
+    ///
+    /// Logging in this class follows the same rule and for a related reason:
+    /// the log sink flushes synchronously and rotates with several
+    /// <c>File.Move</c> calls, so a <c>_log</c> call made under <c>_gate</c>
+    /// would let a slow disk block a thread that only wants to read
+    /// <see cref="Status"/> or <see cref="Completion"/>.
     /// </summary>
     private void Publish(SyncStatusView status)
     {
@@ -248,9 +316,14 @@ public sealed class SyncCoordinator : ISyncPresenter, ISyncController, IDisposab
     {
         Cancel();
 
-        // Bounded rather than indefinite: shutdown must not hang on a sync that
-        // refuses to notice its cancellation.
-        Completion.Wait(TimeSpan.FromSeconds(5));
+        if (!Completion.Wait(TimeSpan.FromSeconds(5)))
+        {
+            // Shutdown must not hang on a sync that refuses to notice its
+            // cancellation — but a timeout here means the orchestrator's
+            // workers are still live when the host closes the connections
+            // they write through, which is worth knowing about afterwards.
+            _log.LogError("shutdown timed out waiting five seconds for the sync to stop");
+        }
 
         lock (_gate)
         {

@@ -12,5 +12,8 @@ public interface IExternalLinks
     /// <summary>The folder holding the database and the stored key.</summary>
     void OpenDataFolder();
 
+    /// <summary>The log file, for a user who is reporting a problem.</summary>
+    void OpenLogFile();
+
     void OpenUrl(string url);
 }

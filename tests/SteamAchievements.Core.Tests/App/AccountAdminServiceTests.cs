@@ -1,4 +1,6 @@
 using System.Net;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using SteamAchievements.Core.App;
 using SteamAchievements.Core.Data;
 using SteamAchievements.Core.Steam;
@@ -16,7 +18,7 @@ public class AccountAdminServiceTests
     private static readonly ulong ActiveInFixture = TempSteamRoot.ActiveSteamId;
 
     private static async Task<(AccountAdminService Admin, MemorySecretStore Secrets, IAccountStore Accounts, Microsoft.Data.Sqlite.SqliteConnection Connection)>
-        BuildAsync(string? steamPath = null)
+        BuildAsync(string? steamPath = null, ILogger<AccountAdminService>? log = null)
     {
         var body = await File.ReadAllTextAsync(TestPaths.Data("profile_public.xml"));
         var connection = Database.Open(":memory:");
@@ -34,8 +36,10 @@ public class AccountAdminServiceTests
             });
 
         var admin = new AccountAdminService(
-            new SqliteLibraryReset(connection), accounts, secrets,
-            new SteamAccountLocator(new FixedSteamPath(steamPath)), community);
+            new SqliteLibraryReset(connection, NullLogger<SqliteLibraryReset>.Instance),
+            accounts, secrets,
+            new SteamAccountLocator(new FixedSteamPath(steamPath)), community,
+            log ?? NullLogger<AccountAdminService>.Instance);
 
         return (admin, secrets, accounts, connection);
     }
@@ -137,5 +141,25 @@ public class AccountAdminServiceTests
 
             Assert.Equal("#c98f7a", new SqliteUserPreferences(connection).Accent);
         }
+    }
+
+    [Fact]
+    public async Task LogsTheResetBecauseItDestroysTheLibrary()
+    {
+        var log = new RecordingLogger<AccountAdminService>();
+        var (admin, _, _, connection) = await BuildAsync(log: log);
+
+        using (connection)
+        {
+            admin.ResetEverything();
+        }
+
+        // Warning, not merely present: a reset is destructive — it empties
+        // the library and discards the stored key — and the design states
+        // that promise explicitly (docs/windows-first-run.md marks the same
+        // line "(Warning)"). A downgrade to Information would still leave
+        // "the message appeared" green.
+        Assert.True(log.LoggedAt(LogLevel.Warning, "reset requested"));
+        Assert.True(log.Logged("reset finished"));
     }
 }

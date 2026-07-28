@@ -35,6 +35,13 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.AspNetCore.Components.WebView.Wpf" Version="10.0.90" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.10" />
+    <!--
+      The factory. Microsoft.Extensions.Logging and its Abstractions already
+      arrive transitively through Components.WebView.Wpf; naming it here makes
+      the dependency the composition root actually uses explicit rather than
+      accidental.
+    -->
+    <PackageReference Include="Microsoft.Extensions.Logging" Version="10.0.10" />
   </ItemGroup>
 
   <ItemGroup>

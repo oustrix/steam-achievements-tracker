@@ -620,6 +620,10 @@ a question only a Windows machine can answer in five minutes into one
 
 ### 9.1 What only Windows can verify
 
+> **Superseded.** The living checklist is `docs/windows-first-run.md`, which
+> carries these seven items plus what the log must show for each. This section
+> is left as the record of what the host design asked for.
+
 Verified in a single deliberate pass rather than five fishing trips:
 
 1. `publish/` really does contain one file — under the **recursive** check

@@ -9,6 +9,13 @@
 
   <ItemGroup>
     <PackageReference Include="coverlet.collector" Version="6.0.4" />
+    <!--
+      The concrete LoggerFactory, not just the Abstractions package Core
+      references: LoggingHandlerTests needs a real ILoggerFactory to wire
+      RollingFileLoggerProvider up to an ILogger<T>. Test-only; Core keeps
+      depending on Abstractions alone.
+    -->
+    <PackageReference Include="Microsoft.Extensions.Logging" Version="10.0.10" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
     <PackageReference Include="xunit" Version="2.9.3" />
     <PackageReference Include="xunit.runner.visualstudio" Version="3.1.4" />

@@ -31,6 +31,14 @@ public class DataPathsTests
     }
 
     [Fact]
+    public void PutsTheLogBesideTheDatabase()
+    {
+        var paths = DataPaths.Resolve(Path.Combine("base", "dir"));
+
+        Assert.Equal(Path.Combine(paths.Folder, "log.txt"), paths.LogFile);
+    }
+
+    [Fact]
     public void RejectsAnEmptyBaseDirectory()
     {
         Assert.Throws<ArgumentException>(() => DataPaths.Resolve("   "));

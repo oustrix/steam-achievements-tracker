@@ -1,5 +1,5 @@
 @inherits LayoutComponentBase
-@using Microsoft.Data.Sqlite
+@using Microsoft.Extensions.Logging
 @implements IDisposable
 @inject ILibraryQuery Library
 @inject IUserPreferences Preferences
@@ -8,6 +8,7 @@
 @inject IAccountAdmin Accounts
 @inject LibraryChangeSignal LibraryChanged
 @inject NavigationManager Navigation
+@inject ILogger<AppShell> Log
 
 <div class="shell" style="--accent: @(Preferences.Accent ?? AccentPalette.Default)">
     <nav class="sidebar">
@@ -70,29 +71,33 @@
         // screen every time this ran.
         if (step != OnboardingStep.Ready)
         {
-            Navigation.NavigateTo(OnboardingState.RouteFor(step).TrimStart('/'));
-        }
-    }
+            var route = OnboardingState.RouteFor(step);
 
-    private void HandleStateChanged() => InvokeAsync(Guard);
+            Log.LogInformation("guard: step={Step}, redirecting to {Route}", step, route);
+            Navigation.NavigateTo(route.TrimStart('/'));
 
-    private void HandlePreferencesChanged() => InvokeAsync(StateHasChanged);
-
-    private void HandleLibraryChanged() => InvokeAsync(() =>
-    {
-        try
-        {
-            _summary = Library.GetSummary(Clock.Now);
-        }
-        // SQLITE_BUSY and SQLITE_LOCKED only — the race against a sync that has
-        // just finished writing. Any other code is a real failure and must not
-        // be swallowed forever behind stale data.
-        catch (SqliteException e) when (e.SqliteErrorCode is 5 or 6)
-        {
             return;
         }
 
-        StateHasChanged();
+        Log.LogDebug("guard: step={Step}, staying put", step);
+    }
+
+    private void HandleStateChanged() => InvokeAsync(() =>
+    {
+        ChangeHandlerGuard.Guard(Log, "onboarding guard failed", Guard);
+    });
+
+    private void HandlePreferencesChanged() => InvokeAsync(() =>
+    {
+        ChangeHandlerGuard.Guard(Log, "reacting to a preference change failed", StateHasChanged);
+    });
+
+    private void HandleLibraryChanged() => InvokeAsync(() =>
+    {
+        if (ChangeHandlerGuard.Reread(Log, "summary", () => _summary = Library.GetSummary(Clock.Now)))
+        {
+            StateHasChanged();
+        }
     });
 
     // Load-bearing, not cleanup for its own sake: these services are singletons

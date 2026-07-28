@@ -99,4 +99,22 @@ public class DatabaseResetTests
 
         Assert.Equal(0, connection.QuerySingle<long>("SELECT COUNT(*) FROM games"));
     }
+
+    [Fact]
+    public void TimesTheVacuumSeparatelyFromTheDeletions()
+    {
+        // VACUUM against a file with three live connections is the specific
+        // untested behaviour on the Windows first-run checklist. "The reset
+        // took forty seconds" and "the VACUUM took thirty-nine of them" are
+        // different findings, so they are different lines. The timing lives on
+        // SqliteLibraryReset, not on Database, so this drives the reset through
+        // that seam rather than through Database.ResetLibrary directly.
+        using var connection = Populated();
+        var log = new RecordingLogger<SqliteLibraryReset>();
+
+        new SqliteLibraryReset(connection, log).Reset();
+
+        Assert.True(log.Logged("library emptied"));
+        Assert.True(log.Logged("vacuum finished"));
+    }
 }

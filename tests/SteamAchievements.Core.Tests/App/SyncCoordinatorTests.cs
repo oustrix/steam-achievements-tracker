@@ -1,3 +1,5 @@
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using SteamAchievements.Core.App;
 using SteamAchievements.Core.Data;
 using SteamAchievements.Core.Presentation;
@@ -58,7 +60,7 @@ public class SyncCoordinatorTests
     }
 
     private static (SyncCoordinator Coordinator, Microsoft.Data.Sqlite.SqliteConnection Connection, IAccountStore Accounts)
-        Build(ISyncRunner runner, bool withAccount = true)
+        Build(ISyncRunner runner, bool withAccount = true, ILogger<SyncCoordinator>? log = null)
     {
         var connection = Database.Open(":memory:");
         var accounts = new SqliteAccountStore(connection);
@@ -69,7 +71,11 @@ public class SyncCoordinatorTests
         }
 
         var clock = new SteppingClock();
-        return (new SyncCoordinator(runner, accounts, new SyncJournal(connection), clock.Read), connection, accounts);
+        return (
+            new SyncCoordinator(
+                runner, accounts, new SyncJournal(connection), clock.Read,
+                log ?? NullLogger<SyncCoordinator>.Instance),
+            connection, accounts);
     }
 
     [Fact]
@@ -96,7 +102,8 @@ public class SyncCoordinatorTests
         var clock = new SteppingClock();
         using (connection)
         using (var coordinator = new SyncCoordinator(
-                   new FakeSyncRunner((_, _) => Task.CompletedTask), accounts, journal, clock.Read))
+                   new FakeSyncRunner((_, _) => Task.CompletedTask), accounts, journal, clock.Read,
+                   NullLogger<SyncCoordinator>.Instance))
         {
             Assert.Equal(SyncPhase.Idle, coordinator.Status.Phase);
             Assert.Equal(SyncProblem.None, coordinator.Status.Problem);
@@ -114,7 +121,8 @@ public class SyncCoordinatorTests
 
             var clock = new SteppingClock();
             using var fresh = new SyncCoordinator(
-                new FakeSyncRunner((_, _) => Task.CompletedTask), accounts, new SyncJournal(connection), clock.Read);
+                new FakeSyncRunner((_, _) => Task.CompletedTask), accounts, new SyncJournal(connection), clock.Read,
+                NullLogger<SyncCoordinator>.Instance);
 
             Assert.Equal(SyncProblem.InvalidKey, fresh.Status.Problem);
         }
@@ -360,5 +368,86 @@ public class SyncCoordinatorTests
             Assert.Equal("No Steam account is configured", coordinator.Status.AlertTitle);
             Assert.Empty(new SqliteLibraryQuery(connection).GetSyncHistory(10, Start.AddHours(1)));
         }
+    }
+
+    [Fact]
+    public void LogsTheStartAndTheCompletionOfASuccessfulRun()
+    {
+        var log = new RecordingLogger<SyncCoordinator>();
+        var (coordinator, connection, _) = Build(
+            new FakeSyncRunner((_, _) => Task.CompletedTask), log: log);
+
+        using (connection)
+        using (coordinator)
+        {
+            coordinator.Start(force: false);
+            coordinator.Completion.Wait();
+        }
+
+        Assert.True(log.Logged("sync started"));
+        Assert.True(log.Logged("sync completed"));
+    }
+
+    [Fact]
+    public void LogsAFailedRunWithItsException()
+    {
+        var log = new RecordingLogger<SyncCoordinator>();
+        var (coordinator, connection, _) = Build(
+            new FakeSyncRunner((_, _) => Task.FromException(new InvalidOperationException("boom"))),
+            log: log);
+
+        using (connection)
+        using (coordinator)
+        {
+            coordinator.Start(force: false);
+            coordinator.Completion.Wait();
+        }
+
+        // Error, not merely present: a failed sync is the design's stated
+        // "real failure" promise, and a downgrade to Warning or Information
+        // would still leave every other assertion here green.
+        Assert.True(log.LoggedAt(LogLevel.Error, "sync failed"));
+        Assert.Contains(log.Errors, e => e?.Message == "boom");
+    }
+
+    [Fact]
+    public void LogsAPauseAsAPauseRatherThanACancellation()
+    {
+        var log = new RecordingLogger<SyncCoordinator>();
+        var (coordinator, connection, _) = Build(
+            new FakeSyncRunner((_, token) => UntilCancelled(token)), log: log);
+
+        using (connection)
+        using (coordinator)
+        {
+            coordinator.Start(force: false);
+            coordinator.Pause();
+            coordinator.Completion.Wait(TimeSpan.FromSeconds(5));
+        }
+
+        Assert.True(log.Logged("sync pause requested"));
+        Assert.True(log.Logged("sync paused"));
+    }
+
+    // Scoped to the happy-path run rather than named after a class-wide
+    // guarantee: the constructor's key-rejection warning legitimately
+    // contains the word "key" (it names the condition, never the secret
+    // value — SyncCoordinator never reads the value at all), so a
+    // whole-class claim would be false the moment that branch runs.
+    [Fact]
+    public void AStartAndCompleteRunNeverMentionsAKey()
+    {
+        var log = new RecordingLogger<SyncCoordinator>();
+        var (coordinator, connection, _) = Build(
+            new FakeSyncRunner((_, _) => Task.CompletedTask), log: log);
+
+        using (connection)
+        using (coordinator)
+        {
+            coordinator.Start(force: false);
+            coordinator.Completion.Wait();
+        }
+
+        Assert.DoesNotContain(log.Lines, line => line.Contains("key", StringComparison.OrdinalIgnoreCase));
     }
 }

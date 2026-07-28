@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging;
 using SteamAchievements.Core.Abstractions;
 using SteamAchievements.Core.Data;
 using SteamAchievements.Core.Presentation;
@@ -114,4 +115,109 @@ public sealed class FakeAccountAdmin : IAccountAdmin
     }
 
     public void Raise() => Changed?.Invoke();
+}
+
+/// <summary>
+/// Captures what a component logged, so a test can assert that a branch which
+/// otherwise leaves no trace — a swallowed exception, a cancelled run — said so.
+///
+/// The list is guarded because SyncOrchestrator logs from four worker threads
+/// and an unsynchronized List would drop entries under exactly the load these
+/// tests exist to cover.
+/// </summary>
+public sealed class RecordingLogger<T> : ILogger<T>
+{
+    private readonly Lock _gate = new();
+    private readonly List<string> _lines = [];
+    private readonly List<LogLevel> _levels = [];
+    private readonly List<Exception?> _errors = [];
+
+    public IReadOnlyList<string> Lines
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return _lines.ToArray();
+            }
+        }
+    }
+
+    /// <summary>
+    /// The level each entry in <see cref="Lines"/> was logged at, same index.
+    /// Without this, no test could hold the design to its specific level
+    /// promises — Warning for a lost race, Error for a real failure, Critical
+    /// for the crash hooks — and a future edit that quietly downgraded one of
+    /// those would still pass every existing "the message appeared" assertion.
+    /// </summary>
+    public IReadOnlyList<LogLevel> Levels
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return _levels.ToArray();
+            }
+        }
+    }
+
+    public IReadOnlyList<Exception?> Errors
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return _errors.ToArray();
+            }
+        }
+    }
+
+    public bool Logged(string fragment) => Lines.Any(line => line.Contains(fragment, StringComparison.Ordinal));
+
+    /// <summary>
+    /// Pairs a line with its level under a single lock, rather than comparing
+    /// separately captured snapshots of <see cref="Lines"/> and
+    /// <see cref="Levels"/> — those are two independent locks over the same
+    /// gate taken one after another, so a write landing between them would
+    /// leave the two snapshots at different lengths and misalign every index
+    /// after it.
+    /// </summary>
+    public bool LoggedAt(LogLevel level, string fragment)
+    {
+        lock (_gate)
+        {
+            for (var i = 0; i < _lines.Count; i++)
+            {
+                if (_levels[i] == level && _lines[i].Contains(fragment, StringComparison.Ordinal))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+    }
+
+    public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+
+    public bool IsEnabled(LogLevel logLevel) => true;
+
+    public void Log<TState>(
+        LogLevel logLevel,
+        EventId eventId,
+        TState state,
+        Exception? exception,
+        Func<TState, Exception?, string> formatter)
+    {
+        lock (_gate)
+        {
+            _lines.Add(formatter(state, exception));
+            _levels.Add(logLevel);
+
+            if (exception is not null)
+            {
+                _errors.Add(exception);
+            }
+        }
+    }
 }

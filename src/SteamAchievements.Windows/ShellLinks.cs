@@ -9,12 +9,19 @@ public sealed class ShellLinks : IExternalLinks
     public const string ApiKeyPage = "https://steamcommunity.com/dev/apikey";
 
     private readonly string _dataFolder;
+    private readonly string _logFile;
 
-    public ShellLinks(string dataFolder) => _dataFolder = dataFolder;
+    public ShellLinks(string dataFolder, string logFile)
+    {
+        _dataFolder = dataFolder;
+        _logFile = logFile;
+    }
 
     public void OpenApiKeyPage() => OpenUrl(ApiKeyPage);
 
     public void OpenDataFolder() => OpenUrl(_dataFolder);
+
+    public void OpenLogFile() => OpenUrl(_logFile);
 
     public void OpenUrl(string url)
     {

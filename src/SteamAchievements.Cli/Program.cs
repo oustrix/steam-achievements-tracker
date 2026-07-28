@@ -1,6 +1,8 @@
 using System.Diagnostics;
+using Microsoft.Extensions.Logging;
 using SteamAchievements.Core.Abstractions;
 using SteamAchievements.Core.Data;
+using SteamAchievements.Core.Diagnostics;
 using SteamAchievements.Core.Local;
 using SteamAchievements.Core.Steam;
 using SteamAchievements.Core.Sync;
@@ -41,21 +43,45 @@ if (steamId is null)
 var dbPath = options.DbPath ?? Path.Combine(Path.GetTempPath(), "steam-achievements-tracker.db");
 Console.WriteLine($"Database: {dbPath}");
 
+// Debug, because this tool exists for the runs that go wrong. ConsoleLogProvider,
+// not the stock AddSimpleConsole: this process holds a real Steam Web API key
+// (from --key or STEAM_API_KEY), LoggingHandler below logs every request URL
+// at Debug, and that URL carries the key in its query string. The stock
+// console provider formats but does not scrub, which would print the key to
+// stdout on every request; ConsoleLogProvider runs it through the same
+// Redaction.Scrub the file sink uses, by construction rather than by remembering.
+using var loggers = LoggerFactory.Create(builder => builder
+    .SetMinimumLevel(LogLevel.Debug)
+    .AddProvider(new ConsoleLogProvider(() => DateTimeOffset.UtcNow)));
+
 using var connection = Database.Open(dbPath);
 var repository = new GameRepository(connection);
 
 // Chain: innerHandler does the real HTTP work; countingHandler wraps it to
-// track request volume cheaply; fixtureHandler (optional) wraps that to
-// capture anonymized bodies. HttpClient owns and disposes the whole chain —
-// DelegatingHandler.Dispose cascades to InnerHandler, so only the outermost
-// handler needs to reach the HttpClient constructor.
+// track request volume cheaply; loggingHandler wraps that to record every
+// request; fixtureHandler (optional) wraps that to capture anonymized
+// bodies. HttpClient owns and disposes the whole chain — DelegatingHandler.
+// Dispose cascades to InnerHandler, so only the outermost handler needs to
+// reach the HttpClient constructor.
 var innerHandler = new HttpClientHandler();
 var countingHandler = new RequestCountingHandler(innerHandler);
-HttpMessageHandler outermostHandler = countingHandler;
+
+// Outside RequestCountingHandler (rather than inside it) so the elapsed time
+// LoggingHandler measures — it brackets its Stopwatch around base.SendAsync —
+// covers everything beneath it in the chain, including RequestCountingHandler's
+// own bookkeeping, not just the network hop underneath that. RequestCountingHandler
+// has no retry logic of its own to worry about here; it only increments a
+// counter once per SendAsync call.
+var loggingHandler = new LoggingHandler(loggers.CreateLogger<LoggingHandler>())
+{
+    InnerHandler = countingHandler,
+};
+
+HttpMessageHandler outermostHandler = loggingHandler;
 
 if (options.DumpFixturesDir is not null)
 {
-    outermostHandler = new FixtureCapturingHandler(countingHandler, options.DumpFixturesDir, apiKey, steamId.Value.ToString());
+    outermostHandler = new FixtureCapturingHandler(loggingHandler, options.DumpFixturesDir, apiKey, steamId.Value.ToString());
     Console.WriteLine($"Dumping anonymized fixtures to: {options.DumpFixturesDir}");
 }
 
@@ -65,7 +91,10 @@ using var http = new HttpClient(outermostHandler)
 };
 
 var client = new SteamApiClient(http, apiKey);
-var orchestrator = new SyncOrchestrator(client, repository, SyncOptions.Default);
+
+var orchestrator = new SyncOrchestrator(
+    client, repository, SyncOptions.Default,
+    loggers.CreateLogger<SyncOrchestrator>());
 
 using var cts = new CancellationTokenSource();
 Console.CancelKeyPress += (_, e) =>
@@ -128,15 +157,20 @@ catch (OperationCanceledException)
 }
 catch (SteamApiException e) when (e.Kind == SteamApiErrorKind.InvalidKey)
 {
+    // Scrubbed like every line ConsoleLogProvider writes. SteamApiClient never
+    // echoes a request URL into an exception message by design — there is no
+    // live leak today — but that is a discipline, not a guarantee, and this
+    // path is the one place that prints an exception message without going
+    // through TextLoggerProvider's shared format-then-scrub sequence.
     Console.Error.WriteLine();
-    Console.Error.WriteLine($"Steam rejected the API key: {e.Message}");
+    Console.Error.WriteLine($"Steam rejected the API key: {Redaction.Scrub(e.Message)}");
     Console.Error.WriteLine("Check it at https://steamcommunity.com/dev/apikey, or pass a different one via --key / STEAM_API_KEY.");
     return 1;
 }
 catch (SteamApiException e)
 {
     Console.Error.WriteLine();
-    Console.Error.WriteLine($"Steam API error: {e.Message}");
+    Console.Error.WriteLine($"Steam API error: {Redaction.Scrub(e.Message)}");
     return 1;
 }
 

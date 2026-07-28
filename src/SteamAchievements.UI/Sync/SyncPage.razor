@@ -1,12 +1,13 @@
 @page "/sync"
 @implements IDisposable
-@using Microsoft.Data.Sqlite
+@using Microsoft.Extensions.Logging
 @inject ILibraryQuery Library
 @inject IClock Clock
 @inject ISyncPresenter Sync
 @inject ISyncController Controller
 @inject LibraryChangeSignal LibraryChanged
 @inject NavigationManager Navigation
+@inject ILogger<SyncPage> Log
 
 <PageTitle>Sync</PageTitle>
 
@@ -101,28 +102,18 @@
     // rather than throws — InvokeAsync is what serializes it.
     private void HandleStatusChanged() => InvokeAsync(() =>
     {
-        _status = Sync.Status;
-        StateHasChanged();
+        if (ChangeHandlerGuard.Guard(Log, "reacting to a sync status change failed", () => _status = Sync.Status))
+        {
+            StateHasChanged();
+        }
     });
 
     private void HandleLibraryChanged() => InvokeAsync(() =>
     {
-        try
+        if (ChangeHandlerGuard.Reread(Log, "history", () => _history = Library.GetSyncHistory(20, Clock.Now)))
         {
-            _history = Library.GetSyncHistory(20, Clock.Now);
+            StateHasChanged();
         }
-        // 5 and 6 are SQLITE_BUSY and SQLITE_LOCKED: a re-read racing the write
-        // that has just finished. The previous history stays on screen and the
-        // next signal tries again; letting those out tears down the circuit and
-        // leaves an empty window. Every other error code — a broken query, a
-        // corrupt file, a full disk — is not this race and must not be
-        // swallowed forever behind stale data.
-        catch (SqliteException e) when (e.SqliteErrorCode is 5 or 6)
-        {
-            return;
-        }
-
-        StateHasChanged();
     });
 
     private void Primary()
