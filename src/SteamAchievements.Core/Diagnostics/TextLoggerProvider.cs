@@ -81,7 +81,12 @@ public abstract class TextLoggerProvider : ILoggerProvider
         public TextLogger(TextLoggerProvider provider, string category)
         {
             _provider = provider;
-            _category = category;
+
+            // Shortened once here rather than on every line: the category is
+            // bound for the lifetime of this logger instance, so re-deriving
+            // its last segment on every Log call — as LogLine.Format used to —
+            // repeated the same string operation for no reason.
+            _category = LogLine.ShortCategory(category);
         }
 
         /// <summary>
