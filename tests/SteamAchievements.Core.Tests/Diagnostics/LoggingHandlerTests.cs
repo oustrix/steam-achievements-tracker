@@ -2,6 +2,7 @@ using System.Net;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using SteamAchievements.Core.Diagnostics;
+using SteamAchievements.Core.Tests.Steam;
 
 namespace SteamAchievements.Core.Tests.Diagnostics;
 
@@ -18,19 +19,14 @@ public class LoggingHandlerTests : IDisposable
         }
     }
 
-    private sealed class StubHandler : HttpMessageHandler
-    {
-        private readonly Func<HttpResponseMessage> _respond;
-
-        public StubHandler(Func<HttpResponseMessage> respond) => _respond = respond;
-
-        protected override Task<HttpResponseMessage> SendAsync(
-            HttpRequestMessage request, CancellationToken cancellationToken) =>
-            Task.FromResult(_respond());
-    }
-
+    // FakeHttpMessageHandler (Tests/Steam) rather than a second, private
+    // stub: it already takes a strict superset of the same delegate shape —
+    // Func<HttpRequestMessage, HttpResponseMessage> instead of a
+    // parameterless Func<HttpResponseMessage> — and additionally honours
+    // cancellation and records the requests it saw, neither of which this
+    // file needed enough to justify a duplicate.
     private static HttpClient ClientOver(ILogger<LoggingHandler> log, Func<HttpResponseMessage> respond) =>
-        new(new LoggingHandler(log) { InnerHandler = new StubHandler(respond) });
+        new(new LoggingHandler(log) { InnerHandler = new FakeHttpMessageHandler(_ => respond()) });
 
     private static string FindLine(string path, string containing) =>
         Assert.Single(
