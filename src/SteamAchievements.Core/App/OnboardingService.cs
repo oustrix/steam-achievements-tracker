@@ -59,60 +59,69 @@ public sealed class OnboardingService : IOnboarding
         Changed?.Invoke();
     }
 
+    /// <summary>
+    /// Four exit points, each an early return through <see cref="LogOutcome"/>,
+    /// rather than one <c>outcome</c> variable threaded through to a single log
+    /// call at the bottom. That single-log-site shape was tried and abandoned:
+    /// it forced every branch through one more level of nesting to reach the
+    /// line that decided whether to store the key, and it merged two tests
+    /// that each checked one branch's behaviour in isolation into one test
+    /// that had to know about all of them. Do not reintroduce it — the
+    /// duplication of one log call across four call sites is cheaper than
+    /// either cost.
+    /// </summary>
     public async Task<KeySubmission> SubmitKeyAsync(string pasted, CancellationToken cancellationToken)
     {
-        KeySubmission outcome;
+        // The one place every branch below passes through on its way out —
+        // the key itself never reaches this call, only the outcome does.
+        KeySubmission LogOutcome(KeySubmission outcome)
+        {
+            _log.LogInformation("key submission outcome: {Outcome}", outcome);
+            return outcome;
+        }
 
         // Format first, so a typo costs nothing.
         if (!ApiKey.TryNormalize(pasted, out var normalized))
         {
-            outcome = KeySubmission.Malformed;
+            return LogOutcome(KeySubmission.Malformed);
         }
-        else
+
+        var account = _accounts.Current
+            ?? throw new InvalidOperationException("An account must be chosen before a key can be checked.");
+
+        try
         {
-            var account = _accounts.Current
-                ?? throw new InvalidOperationException("An account must be chosen before a key can be checked.");
-
-            try
-            {
-                // One cheap call that answers "is this key any good". Without it
-                // the user finds out several minutes into their first sync
-                // instead.
-                await _clientFactory(normalized).GetOwnedGamesAsync(account.SteamId64, cancellationToken);
-                outcome = KeySubmission.Accepted;
-            }
-            catch (SteamApiException e) when (e.Kind == SteamApiErrorKind.InvalidKey)
-            {
-                outcome = KeySubmission.Rejected;
-            }
-            catch (SteamApiException)
-            {
-                // Rate limited, a 5xx, or a transport failure the client already
-                // folded into ServerError. The key may well be fine, so it is not
-                // called rejected and it is not stored either.
-                outcome = KeySubmission.Unreachable;
-            }
-
-            if (outcome == KeySubmission.Accepted)
-            {
-                _secrets.Write(normalized);
-
-                // A new key deserves a clean slate: whatever made the previous
-                // one look rejected has nothing to do with this one.
-                _accounts.ClearKeyRejected();
-            }
+            // One cheap call that answers "is this key any good". Without it
+            // the user finds out several minutes into their first sync
+            // instead.
+            await _clientFactory(normalized).GetOwnedGamesAsync(account.SteamId64, cancellationToken);
         }
-
-        // Logged once here rather than at each of the return points above: this
-        // is the single place every branch passes through, and the key itself
-        // never reaches this call — only the outcome does.
-        _log.LogInformation("key submission outcome: {Outcome}", outcome);
-
-        if (outcome == KeySubmission.Accepted)
+        catch (SteamApiException e) when (e.Kind == SteamApiErrorKind.InvalidKey)
         {
-            _log.LogInformation("onboarding step is now {Step}", Step);
-            Changed?.Invoke();
+            return LogOutcome(KeySubmission.Rejected);
         }
+        catch (SteamApiException)
+        {
+            // Rate limited, a 5xx, or a transport failure the client already
+            // folded into ServerError. The key may well be fine, so it is not
+            // called rejected and it is not stored either.
+            return LogOutcome(KeySubmission.Unreachable);
+        }
+
+        _secrets.Write(normalized);
+
+        // A new key deserves a clean slate: whatever made the previous
+        // one look rejected has nothing to do with this one.
+        _accounts.ClearKeyRejected();
+
+        var outcome = LogOutcome(KeySubmission.Accepted);
+
+        // Step is computed rather than stored, so the only place that can log a
+        // change to it is here, immediately before the event that tells the UI
+        // to re-read it — logging inside the Step getter itself would fire on
+        // every guard read AppShell makes, not once per change.
+        _log.LogInformation("onboarding step is now {Step}", Step);
+        Changed?.Invoke();
 
         return outcome;
     }
