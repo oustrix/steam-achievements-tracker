@@ -1,6 +1,7 @@
 @page "/settings"
 @using SteamAchievements.Core.Sync
 @using Microsoft.Data.Sqlite
+@using Microsoft.Extensions.Logging
 @implements IDisposable
 @inject IUserPreferences Preferences
 @inject ILibraryQuery Library
@@ -11,6 +12,7 @@
 @inject ISyncController Sync
 @inject LibraryChangeSignal LibraryChanged
 @inject IExternalLinks Links
+@inject ILogger<SettingsPage> Log
 
 <PageTitle>Settings</PageTitle>
 
@@ -244,23 +246,37 @@
 
     private void HandleAccountsChanged() => InvokeAsync(() =>
     {
-        _row = AccountRowView.For(Accounts.Current, Accounts.Mismatch);
-        StateHasChanged();
+        try
+        {
+            _row = AccountRowView.For(Accounts.Current, Accounts.Mismatch);
+            StateHasChanged();
+        }
+        catch (Exception e)
+        {
+            Log.LogError(e, "reacting to an account change failed");
+        }
     });
 
     private void HandleSyncChanged() => InvokeAsync(() =>
     {
-        _gate = DestructiveActions.For(SyncStatus.Status);
-
-        // A confirmation panel left open when a sync starts is one click from
-        // emptying the library under a live writer. Closing it is the only
-        // honest answer: the click it was waiting for is no longer safe.
-        if (!_gate.Allowed)
+        try
         {
-            _pending = Pending.None;
-        }
+            _gate = DestructiveActions.For(SyncStatus.Status);
 
-        StateHasChanged();
+            // A confirmation panel left open when a sync starts is one click from
+            // emptying the library under a live writer. Closing it is the only
+            // honest answer: the click it was waiting for is no longer safe.
+            if (!_gate.Allowed)
+            {
+                _pending = Pending.None;
+            }
+
+            StateHasChanged();
+        }
+        catch (Exception e)
+        {
+            Log.LogError(e, "reacting to a sync status change failed");
+        }
     });
 
     private void HandleLibraryChanged() => InvokeAsync(() =>
@@ -274,6 +290,17 @@
         // be swallowed forever behind stale data.
         catch (SqliteException e) when (e.SqliteErrorCode is 5 or 6)
         {
+            Log.LogWarning(e, "settings re-read lost a race with the writer (code {Code})", e.SqliteErrorCode);
+
+            return;
+        }
+        // Nothing awaits this Task, so without this an escaping exception is
+        // simply lost: no message, no crash, a screen that quietly stops
+        // updating.
+        catch (Exception e)
+        {
+            Log.LogError(e, "settings re-read failed");
+
             return;
         }
 
@@ -301,8 +328,9 @@
         // matters just as much, because the user has to know the library was not
         // emptied. An exception leaving a Blazor event handler inside
         // BlazorWebView is a blank window, not a message.
-        catch (SqliteException)
+        catch (SqliteException e)
         {
+            Log.LogError(e, "account switch failed to write; the library was not emptied");
             _writeFailed = true;
         }
         finally
@@ -323,8 +351,9 @@
         {
             Accounts.ResetEverything();
         }
-        catch (SqliteException)
+        catch (SqliteException e)
         {
+            Log.LogError(e, "reset failed to write; the library was not emptied");
             _writeFailed = true;
         }
     }

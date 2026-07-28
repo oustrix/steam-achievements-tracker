@@ -1,5 +1,6 @@
 @page "/"
 @using Microsoft.Data.Sqlite
+@using Microsoft.Extensions.Logging
 @implements IDisposable
 @inject ILibraryQuery Library
 @inject IClock Clock
@@ -7,6 +8,7 @@
 @inject NavigationManager Navigation
 @inject IJSRuntime Js
 @inject LibraryChangeSignal LibraryChanged
+@inject ILogger<QueuePage> Log
 
 <PageTitle>Completion queue</PageTitle>
 
@@ -73,6 +75,17 @@
         // be swallowed forever behind stale data.
         catch (SqliteException e) when (e.SqliteErrorCode is 5 or 6)
         {
+            Log.LogWarning(e, "queue re-read lost a race with the writer (code {Code})", e.SqliteErrorCode);
+
+            return;
+        }
+        // Nothing awaits this Task, so without this an escaping exception is
+        // simply lost: no message, no crash, a screen that quietly stops
+        // updating.
+        catch (Exception e)
+        {
+            Log.LogError(e, "queue re-read failed");
+
             return;
         }
 

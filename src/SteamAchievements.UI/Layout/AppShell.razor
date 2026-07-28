@@ -1,5 +1,6 @@
 @inherits LayoutComponentBase
 @using Microsoft.Data.Sqlite
+@using Microsoft.Extensions.Logging
 @implements IDisposable
 @inject ILibraryQuery Library
 @inject IUserPreferences Preferences
@@ -8,6 +9,7 @@
 @inject IAccountAdmin Accounts
 @inject LibraryChangeSignal LibraryChanged
 @inject NavigationManager Navigation
+@inject ILogger<AppShell> Log
 
 <div class="shell" style="--accent: @(Preferences.Accent ?? AccentPalette.Default)">
     <nav class="sidebar">
@@ -70,13 +72,40 @@
         // screen every time this ran.
         if (step != OnboardingStep.Ready)
         {
-            Navigation.NavigateTo(OnboardingState.RouteFor(step).TrimStart('/'));
+            var route = OnboardingState.RouteFor(step);
+
+            Log.LogInformation("guard: step={Step}, redirecting to {Route}", step, route);
+            Navigation.NavigateTo(route.TrimStart('/'));
+
+            return;
         }
+
+        Log.LogDebug("guard: step={Step}, staying put", step);
     }
 
-    private void HandleStateChanged() => InvokeAsync(Guard);
+    private void HandleStateChanged() => InvokeAsync(() =>
+    {
+        try
+        {
+            Guard();
+        }
+        catch (Exception e)
+        {
+            Log.LogError(e, "onboarding guard failed");
+        }
+    });
 
-    private void HandlePreferencesChanged() => InvokeAsync(StateHasChanged);
+    private void HandlePreferencesChanged() => InvokeAsync(() =>
+    {
+        try
+        {
+            StateHasChanged();
+        }
+        catch (Exception e)
+        {
+            Log.LogError(e, "reacting to a preference change failed");
+        }
+    });
 
     private void HandleLibraryChanged() => InvokeAsync(() =>
     {
@@ -89,6 +118,17 @@
         // be swallowed forever behind stale data.
         catch (SqliteException e) when (e.SqliteErrorCode is 5 or 6)
         {
+            Log.LogWarning(e, "summary re-read lost a race with the writer (code {Code})", e.SqliteErrorCode);
+
+            return;
+        }
+        // Nothing awaits this Task, so without this an escaping exception is
+        // simply lost: no message, no crash, a screen that quietly stops
+        // updating.
+        catch (Exception e)
+        {
+            Log.LogError(e, "summary re-read failed");
+
             return;
         }
 

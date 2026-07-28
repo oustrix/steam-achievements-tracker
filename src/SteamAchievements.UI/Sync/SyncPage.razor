@@ -1,12 +1,14 @@
 @page "/sync"
 @implements IDisposable
 @using Microsoft.Data.Sqlite
+@using Microsoft.Extensions.Logging
 @inject ILibraryQuery Library
 @inject IClock Clock
 @inject ISyncPresenter Sync
 @inject ISyncController Controller
 @inject LibraryChangeSignal LibraryChanged
 @inject NavigationManager Navigation
+@inject ILogger<SyncPage> Log
 
 <PageTitle>Sync</PageTitle>
 
@@ -101,8 +103,15 @@
     // rather than throws — InvokeAsync is what serializes it.
     private void HandleStatusChanged() => InvokeAsync(() =>
     {
-        _status = Sync.Status;
-        StateHasChanged();
+        try
+        {
+            _status = Sync.Status;
+            StateHasChanged();
+        }
+        catch (Exception e)
+        {
+            Log.LogError(e, "reacting to a sync status change failed");
+        }
     });
 
     private void HandleLibraryChanged() => InvokeAsync(() =>
@@ -119,6 +128,17 @@
         // swallowed forever behind stale data.
         catch (SqliteException e) when (e.SqliteErrorCode is 5 or 6)
         {
+            Log.LogWarning(e, "history re-read lost a race with the writer (code {Code})", e.SqliteErrorCode);
+
+            return;
+        }
+        // Nothing awaits this Task, so without this an escaping exception is
+        // simply lost: no message, no crash, a screen that quietly stops
+        // updating.
+        catch (Exception e)
+        {
+            Log.LogError(e, "history re-read failed");
+
             return;
         }
 
