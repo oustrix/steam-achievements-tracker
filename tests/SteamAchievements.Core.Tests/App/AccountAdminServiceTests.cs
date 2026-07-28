@@ -154,7 +154,12 @@ public class AccountAdminServiceTests
             admin.ResetEverything();
         }
 
-        Assert.True(log.Logged("reset requested"));
+        // Warning, not merely present: a reset is destructive — it empties
+        // the library and discards the stored key — and the design states
+        // that promise explicitly (docs/windows-first-run.md marks the same
+        // line "(Warning)"). A downgrade to Information would still leave
+        // "the message appeared" green.
+        Assert.True(log.LoggedAt(LogLevel.Warning, "reset requested"));
         Assert.True(log.Logged("reset finished"));
     }
 }

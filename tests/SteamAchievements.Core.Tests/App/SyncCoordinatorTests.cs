@@ -403,7 +403,10 @@ public class SyncCoordinatorTests
             coordinator.Completion.Wait();
         }
 
-        Assert.True(log.Logged("sync failed"));
+        // Error, not merely present: a failed sync is the design's stated
+        // "real failure" promise, and a downgrade to Warning or Information
+        // would still leave every other assertion here green.
+        Assert.True(log.LoggedAt(LogLevel.Error, "sync failed"));
         Assert.Contains(log.Errors, e => e?.Message == "boom");
     }
 
