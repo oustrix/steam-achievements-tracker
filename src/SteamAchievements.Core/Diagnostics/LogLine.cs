@@ -21,6 +21,21 @@ public static class LogLine
     private const string Indent = "    ";
 
     /// <summary>
+    /// Sized for the common line: no exception block, and a formatted line
+    /// otherwise runs 60-150 characters (measured across a sync's ~7,000
+    /// calls). 160 covers that range with a little headroom, so this needs one
+    /// allocation instead of the several doublings a default 16-char buffer
+    /// would take to get there.
+    /// </summary>
+    private const int TypicalLineCapacity = 160;
+
+    /// <summary>
+    /// <paramref name="category"/> is used exactly as given — it is not run
+    /// through <see cref="ShortCategory"/> here. The category is fixed for the
+    /// lifetime of a logger instance, so <see cref="TextLoggerProvider"/>
+    /// shortens it once, in the logger's constructor, rather than on every
+    /// line this method formats.
+    ///
     /// A <c>message</c> containing an embedded newline is not special-cased:
     /// it becomes several physical lines in the file. That is caller
     /// discipline, not something this method enforces.
@@ -28,13 +43,13 @@ public static class LogLine
     public static string Format(
         DateTimeOffset at, LogLevel level, string category, string message, Exception? error)
     {
-        var builder = new StringBuilder();
+        var builder = new StringBuilder(TypicalLineCapacity);
 
         builder.Append(at.UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss.fff", CultureInfo.InvariantCulture));
         builder.Append("Z  ");
         builder.Append(Abbreviate(level));
         builder.Append("  ");
-        builder.Append(ShortCategory(category));
+        builder.Append(category);
         builder.Append("  ");
         builder.Append(message);
         builder.Append(NewLine);

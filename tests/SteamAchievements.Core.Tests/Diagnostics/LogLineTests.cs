@@ -11,10 +11,15 @@ public class LogLineTests
     [Fact]
     public void WritesASortableUtcTimestampALevelACategoryAndTheMessage()
     {
+        // "SyncCoordinator", not the full namespaced type name: Format takes
+        // the category exactly as given rather than shortening it itself —
+        // see ShortensANamespacedCategoryToItsLastSegment below for that rule,
+        // and ConsoleLogProviderTests.ProducesTheSameLineShapeAsTheFileProvider
+        // for where it is actually applied, once per logger instance through
+        // TextLoggerProvider rather than once per line here.
         Assert.Equal(
             "2026-07-27 09:14:02.113Z  DBG  SyncCoordinator  sync started force=False\r\n",
-            LogLine.Format(At, LogLevel.Debug, "SteamAchievements.Core.App.SyncCoordinator",
-                "sync started force=False", null));
+            LogLine.Format(At, LogLevel.Debug, "SyncCoordinator", "sync started force=False", null));
     }
 
     [Fact]

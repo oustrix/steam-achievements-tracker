@@ -23,18 +23,13 @@ public class LogFileOptionsTests
         Assert.Throws<ArgumentException>(() => new LogFileOptions(directory!));
     }
 
-    [Fact]
-    public void ThrowsWhenMaxBytesIsZero()
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    public void ThrowsWhenMaxBytesIsNotPositive(int maxBytes)
     {
         Assert.Throws<ArgumentOutOfRangeException>(
-            () => new LogFileOptions("/tmp/some-log-directory", MaxBytes: 0));
-    }
-
-    [Fact]
-    public void ThrowsWhenMaxBytesIsNegative()
-    {
-        Assert.Throws<ArgumentOutOfRangeException>(
-            () => new LogFileOptions("/tmp/some-log-directory", MaxBytes: -1));
+            () => new LogFileOptions("/tmp/some-log-directory", MaxBytes: maxBytes));
     }
 
     [Fact]
@@ -42,22 +37,20 @@ public class LogFileOptionsTests
     {
         // The rotation scheme in RollingFileWriter cannot express a single
         // rotated file: MaxFiles = 1 disables the writer permanently on the
-        // second rotation instead of failing here.
+        // second rotation instead of failing here. Kept as its own Fact,
+        // separate from the Theory below, because that boundary is a distinct
+        // claim from "not positive" — it is the smallest value that passes
+        // this constructor's check yet still cannot work.
         Assert.Throws<ArgumentOutOfRangeException>(
             () => new LogFileOptions("/tmp/some-log-directory", MaxFiles: 1));
     }
 
-    [Fact]
-    public void ThrowsWhenMaxFilesIsZero()
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    public void ThrowsWhenMaxFilesIsNotPositive(int maxFiles)
     {
         Assert.Throws<ArgumentOutOfRangeException>(
-            () => new LogFileOptions("/tmp/some-log-directory", MaxFiles: 0));
-    }
-
-    [Fact]
-    public void ThrowsWhenMaxFilesIsNegative()
-    {
-        Assert.Throws<ArgumentOutOfRangeException>(
-            () => new LogFileOptions("/tmp/some-log-directory", MaxFiles: -1));
+            () => new LogFileOptions("/tmp/some-log-directory", MaxFiles: maxFiles));
     }
 }
