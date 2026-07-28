@@ -1,3 +1,5 @@
+using Microsoft.Extensions.Logging;
+using SteamAchievements.Core.Diagnostics;
 using SteamAchievements.Core.Presentation;
 using SteamAchievements.Preview.Components;
 using SteamAchievements.Preview.Fixtures;
@@ -13,10 +15,24 @@ var builder = WebApplication.CreateBuilder(args);
 // was tried and measured to do nothing: it only sets LoggerFilterOptions's
 // MinLevel, which is a fallback used solely when no LoggerFilterRule
 // matches a given log call. Both appsettings files always contribute a
-// "Default" rule, so that fallback is never reached and the configured
-// level always wins. Microsoft.AspNetCore's own noise is capped at
-// Warning by the same config section, which predates this change and
-// needed no code-side AddFilter to match it.
+// "Default" rule (with no provider alias, so it applies to whichever
+// provider is registered below too), so that fallback is never reached and
+// the configured level always wins. Microsoft.AspNetCore's own noise is
+// capped at Warning by the same config section, which predates this change
+// and needed no code-side AddFilter to match it.
+//
+// ClearProviders, then ConsoleLogProvider, not the stock console/debug/
+// event-source providers CreateBuilder registers by default: those know
+// nothing about Redaction, so every ILogger<T> resolved here would bypass
+// the shared format-then-scrub path entirely. There is no live leak today —
+// this host drives fixtures and never holds a real Steam Web API key — but
+// the design's own rule is structural, not "unless it's just a preview": the
+// preview exists specifically so every call site this branch added is
+// exercised on macOS, and a stock provider here would mean none of them ever
+// touch LogLine.Format or Redaction.Scrub before the first Windows run.
+builder.Logging.ClearProviders();
+builder.Logging.AddProvider(new ConsoleLogProvider(() => DateTimeOffset.UtcNow));
+
 builder.Services.AddRazorComponents().AddInteractiveServerComponents();
 
 // One fixture query per browser session, so the scenario switch in the query
