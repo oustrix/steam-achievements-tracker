@@ -157,15 +157,20 @@ catch (OperationCanceledException)
 }
 catch (SteamApiException e) when (e.Kind == SteamApiErrorKind.InvalidKey)
 {
+    // Scrubbed like every line ConsoleLogProvider writes. SteamApiClient never
+    // echoes a request URL into an exception message by design — there is no
+    // live leak today — but that is a discipline, not a guarantee, and this
+    // path is the one place that prints an exception message without going
+    // through TextLoggerProvider's shared format-then-scrub sequence.
     Console.Error.WriteLine();
-    Console.Error.WriteLine($"Steam rejected the API key: {e.Message}");
+    Console.Error.WriteLine($"Steam rejected the API key: {Redaction.Scrub(e.Message)}");
     Console.Error.WriteLine("Check it at https://steamcommunity.com/dev/apikey, or pass a different one via --key / STEAM_API_KEY.");
     return 1;
 }
 catch (SteamApiException e)
 {
     Console.Error.WriteLine();
-    Console.Error.WriteLine($"Steam API error: {e.Message}");
+    Console.Error.WriteLine($"Steam API error: {Redaction.Scrub(e.Message)}");
     return 1;
 }
 

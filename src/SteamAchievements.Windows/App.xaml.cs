@@ -140,8 +140,14 @@ public partial class App : Application
             {
                 _crashDialogShown = true;
 
+                // Scrubbed like every line that reaches log.txt. SteamApiClient
+                // never echoes a request URL into an exception message by
+                // design — there is no live leak today — but that is a
+                // discipline elsewhere in the codebase, not a guarantee this
+                // MessageBox can rely on, and unlike the log file this dialog
+                // is not something the user can be asked to keep private.
                 MessageBox.Show(
-                    $"Something went wrong:\n\n{args.Exception.Message}\n\nDetails were written to:\n{_logFile}\n\nFurther errors will be written to the log but not shown.",
+                    $"Something went wrong:\n\n{Redaction.Scrub(args.Exception.Message)}\n\nDetails were written to:\n{_logFile}\n\nFurther errors will be written to the log but not shown.",
                     "Steam Achievements Tracker", MessageBoxButton.OK, MessageBoxImage.Error);
             }
 
