@@ -27,6 +27,13 @@ public partial class App : Application
     private ILogger<App>? _log;
     private string _logFile = "";
 
+    /// <summary>
+    /// Guards the dialog in <see cref="InstallExceptionHooks"/> so a recurring
+    /// dispatcher exception — a failing render or layout pass firing every
+    /// frame — cannot reshow a blocking <c>MessageBox</c> on every tick.
+    /// </summary>
+    private bool _crashDialogShown;
+
     protected override void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
@@ -63,10 +70,16 @@ public partial class App : Application
                 new LogFileOptions(paths.Folder, DataPaths.LogFileName),
                 () => DateTimeOffset.UtcNow)));
 
-        _log = _loggers.CreateLogger<App>();
+        // A local rather than reading the field back: the field stays
+        // nullable because OnExit genuinely can run with it unset (the early
+        // Shutdown(1) return above), but everything from here to the end of
+        // this method has it, so keeping it as a local of its non-nullable
+        // declared type makes that structural instead of a per-call `!`.
+        var log = _loggers.CreateLogger<App>();
+        _log = log;
 
-        InstallExceptionHooks();
-        LogEnvironment(paths);
+        InstallExceptionHooks(log);
+        LogEnvironment(log, paths);
 
         // Built before composition, and therefore still available to the
         // failure screen if composition throws. Opening a URL depends on
@@ -82,63 +95,83 @@ public partial class App : Application
         catch (Exception failure) when (
             failure is SqliteException or IOException or UnauthorizedAccessException)
         {
-            _log.LogCritical(failure, "composition failed; showing the failure placard");
+            log.LogCritical(failure, "composition failed; showing the failure placard");
             startup = new HostStartup(null, OnboardingState.QueueRoute, failure.Message, paths.Folder, links);
         }
 
         MainWindow = new MainWindow(startup);
         MainWindow.Show();
 
-        _log.LogInformation("window shown, start path {StartPath}", startup.StartPath);
+        log.LogInformation("window shown, start path {StartPath}", startup.StartPath);
     }
 
     /// <summary>
     /// The three ways an exception escapes without any of them being visible
     /// today: a crash currently looks like a window that silently disappeared.
     /// </summary>
-    private void InstallExceptionHooks()
+    /// <param name="log">
+    /// Passed explicitly rather than read back from <see cref="_log"/>: every
+    /// call site here runs after <see cref="OnStartup"/> has assigned it, and
+    /// a parameter of the non-nullable <c>ILogger&lt;App&gt;</c> type makes
+    /// that structural instead of a matter of remembering a <c>!</c> on every
+    /// dereference.
+    /// </param>
+    private void InstallExceptionHooks(ILogger<App> log)
     {
         DispatcherUnhandledException += (_, args) =>
         {
-            _log!.LogCritical(args.Exception, "unhandled exception on the dispatcher thread");
+            log.LogCritical(args.Exception, "unhandled exception on the dispatcher thread");
 
-            // Handled, and reported with a MessageBox rather than the startup
-            // placard: MainWindow.ShowPlacard is private, and putting the
-            // placard back on top of a live BlazorWebView is layout work macOS
-            // cannot verify — a bad trade on a path that only runs when
-            // something has already gone wrong.
-            MessageBox.Show(
-                $"Something went wrong:\n\n{args.Exception.Message}\n\nDetails were written to:\n{_logFile}",
-                "Steam Achievements Tracker", MessageBoxButton.OK, MessageBoxImage.Error);
+            // Shown once per process, not once per exception. A dispatcher
+            // exception can recur on every tick — a render or layout pass that
+            // fails the same way each frame — and this MessageBox is modal on
+            // the very thread that has to process the next tick; reshowing it
+            // every time would leave killing the process as the only escape,
+            // which is worse than the vanishing window this hook exists to
+            // replace. Every occurrence is still logged at Critical above —
+            // the file is the complete record — only the dialog stops
+            // repeating. A second, different exception gets no dialog of its
+            // own either: distinguishing "the same failure again" from "a new
+            // one" would need identity comparison this handler has no basis
+            // for, so once-per-process is the honest rule rather than a
+            // guess at which exceptions deserve their own popup.
+            if (!_crashDialogShown)
+            {
+                _crashDialogShown = true;
+
+                MessageBox.Show(
+                    $"Something went wrong:\n\n{args.Exception.Message}\n\nDetails were written to:\n{_logFile}\n\nFurther errors will be written to the log but not shown.",
+                    "Steam Achievements Tracker", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
 
             args.Handled = true;
         };
 
         AppDomain.CurrentDomain.UnhandledException += (_, args) =>
-            _log!.LogCritical(
+            log.LogCritical(
                 args.ExceptionObject as Exception,
                 "unhandled exception, terminating={Terminating}", args.IsTerminating);
 
         TaskScheduler.UnobservedTaskException += (_, args) =>
         {
-            _log!.LogError(args.Exception, "unobserved task exception");
+            log.LogError(args.Exception, "unobserved task exception");
             args.SetObserved();
         };
     }
 
-    private void LogEnvironment(DataPaths paths)
+    private void LogEnvironment(ILogger<App> log, DataPaths paths)
     {
         var version = Assembly.GetExecutingAssembly().GetName().Version?.ToString() ?? "unknown";
 
-        _log!.LogInformation(
+        log.LogInformation(
             "starting version={Version} os={Os} arch={Arch} process={ProcessArch}",
             version, Environment.OSVersion.VersionString,
             RuntimeInformation.OSArchitecture, RuntimeInformation.ProcessArchitecture);
 
-        _log.LogInformation(
+        log.LogInformation(
             "webview2 runtime {Version}", WebView2Probe.Version() ?? "not installed");
 
-        _log.LogInformation(
+        log.LogInformation(
             "folder={Folder} database={Database} exists={Exists} log={Log}",
             paths.Folder, paths.DatabaseFile, File.Exists(paths.DatabaseFile), paths.LogFile);
     }
@@ -264,17 +297,40 @@ public partial class App : Application
         // closed, or the orchestrator's worker pool writes into disposed
         // handles. Disposing the provider is what stops it — the coordinator is
         // a singleton the container owns — so the connection loop comes after.
-        _services?.Dispose();
-        _log?.LogInformation("services disposed");
-
-        foreach (var connection in _connections)
+        //
+        // Each stage is also independent of the others: SyncCoordinator.Dispose
+        // joins its worker loop with a bounded wait and can rethrow a faulted
+        // task, and a throw there must not silently skip the connection
+        // closes or the logger disposal that follows — that would lose
+        // exactly the shutdown record the Windows checklist exercises by
+        // closing the app mid-sync. A stage that throws is logged at Critical
+        // while the logger still exists, and execution continues.
+        try
         {
-            connection.Dispose();
+            _services?.Dispose();
+            _log?.LogInformation("services disposed");
+        }
+        catch (Exception disposalFailure)
+        {
+            _log?.LogCritical(disposalFailure, "disposing services failed during shutdown");
         }
 
-        _log?.LogInformation("{Count} connections closed; goodbye", _connections.Count);
+        try
+        {
+            foreach (var connection in _connections)
+            {
+                connection.Dispose();
+            }
 
-        // Last, so everything above reaches the file.
+            _log?.LogInformation("{Count} connections closed; goodbye", _connections.Count);
+        }
+        catch (Exception disposalFailure)
+        {
+            _log?.LogCritical(disposalFailure, "closing a connection failed during shutdown");
+        }
+
+        // Last, so everything above reaches the file — regardless of whether
+        // either stage above threw.
         _loggers?.Dispose();
 
         base.OnExit(e);
