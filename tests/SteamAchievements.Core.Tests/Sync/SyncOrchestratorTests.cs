@@ -1,4 +1,6 @@
 using System.Net;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Polly.CircuitBreaker;
 using SteamAchievements.Core.Data;
 using SteamAchievements.Core.Steam;
@@ -29,7 +31,8 @@ public class SyncOrchestratorTests
                 System.Text.Encoding.UTF8, "text/html"),
         };
 
-    private static async Task<(SyncOrchestrator Sync, GameRepository Repo, FakeHttpMessageHandler Handler)> Build()
+    private static async Task<(SyncOrchestrator Sync, GameRepository Repo, FakeHttpMessageHandler Handler)>
+        Build(ILogger<SyncOrchestrator>? log = null)
     {
         var owned = await File.ReadAllTextAsync(TestPaths.Data("owned_games.json"));
         var schema = await File.ReadAllTextAsync(TestPaths.Data("schema_for_game.json"));
@@ -52,7 +55,10 @@ public class SyncOrchestratorTests
             new HttpClient(handler) { BaseAddress = new Uri("https://api.steampowered.com/") }, "TESTKEY", NoRateLimit());
         var repository = new GameRepository(Database.Open(":memory:"));
 
-        return (new SyncOrchestrator(client, repository, SyncOptions.Default), repository, handler);
+        return (
+            new SyncOrchestrator(
+                client, repository, SyncOptions.Default, log ?? NullLogger<SyncOrchestrator>.Instance),
+            repository, handler);
     }
 
     [Fact]
@@ -137,7 +143,8 @@ public class SyncOrchestratorTests
         var sync = new SyncOrchestrator(
             new SteamApiClient(new HttpClient(handler) { BaseAddress = new Uri("https://api.steampowered.com/") }, "BAD", NoRateLimit()),
             new GameRepository(Database.Open(":memory:")),
-            SyncOptions.Default);
+            SyncOptions.Default,
+            NullLogger<SyncOrchestrator>.Instance);
 
         await Assert.ThrowsAsync<SteamApiException>(
             () => sync.RunAsync(SteamId, force: false, progress: null, CancellationToken.None));
@@ -176,6 +183,7 @@ public class SyncOrchestratorTests
             new SteamApiClient(new HttpClient(handler) { BaseAddress = new Uri("https://api.steampowered.com/") }, "TESTKEY", NoRateLimit()),
             new GameRepository(Database.Open(":memory:")),
             SyncOptions.Default,
+            NullLogger<SyncOrchestrator>.Instance,
             retryBaseDelay: TimeSpan.FromMilliseconds(1));
 
         await sync.RunAsync(SteamId, force: false, progress: null, CancellationToken.None);
@@ -211,6 +219,7 @@ public class SyncOrchestratorTests
             new SteamApiClient(new HttpClient(handler) { BaseAddress = new Uri("https://api.steampowered.com/") }, "TESTKEY", NoRateLimit()),
             new GameRepository(Database.Open(":memory:")),
             SyncOptions.Default,
+            NullLogger<SyncOrchestrator>.Instance,
             retryBaseDelay: TimeSpan.FromMilliseconds(1));
 
         // First call: 1 initial attempt + 4 retries, all failing with a
@@ -269,7 +278,8 @@ public class SyncOrchestratorTests
         var sync = new SyncOrchestrator(
             new SteamApiClient(new HttpClient(handler) { BaseAddress = new Uri("https://api.steampowered.com/") }, "TESTKEY", NoRateLimit()),
             new GameRepository(Database.Open(":memory:")),
-            SyncOptions.Default);
+            SyncOptions.Default,
+            NullLogger<SyncOrchestrator>.Instance);
 
         // Pins that Parallel.ForEachAsync surfaces a single loop-body
         // exception as-is, not wrapped in an AggregateException — that
@@ -323,7 +333,8 @@ public class SyncOrchestratorTests
         var sync = new SyncOrchestrator(
             new SteamApiClient(new HttpClient(handler) { BaseAddress = new Uri("https://api.steampowered.com/") }, "TESTKEY", NoRateLimit()),
             new GameRepository(Database.Open(":memory:")),
-            SyncOptions.Default);
+            SyncOptions.Default,
+            NullLogger<SyncOrchestrator>.Instance);
 
         // Pins that even with multiple concurrent workers discovering the
         // same failure, RunAsync surfaces a bare SteamApiException — not an
@@ -332,5 +343,20 @@ public class SyncOrchestratorTests
             () => sync.RunAsync(SteamId, force: false, progress: null, CancellationToken.None));
 
         Assert.Equal(SteamApiErrorKind.InvalidKey, exception.Kind);
+    }
+
+    [Fact]
+    public async Task LogsThePlanSizeAndEachGamesOutcome()
+    {
+        var log = new RecordingLogger<SyncOrchestrator>();
+        var (orchestrator, repository, _) = await Build(log);
+
+        await orchestrator.RunAsync(SteamId, force: true, null, CancellationToken.None);
+
+        Assert.True(log.Logged("plan:"));
+        Assert.Contains(log.Lines, line => line.Contains("synced", StringComparison.Ordinal));
+
+        // appid 220 is the fixture's no-stats game.
+        Assert.True(log.Logged("game 220 has no achievements"));
     }
 }

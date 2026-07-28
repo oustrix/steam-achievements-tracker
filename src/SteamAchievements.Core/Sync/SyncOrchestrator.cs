@@ -1,5 +1,6 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.ExceptionServices;
+using Microsoft.Extensions.Logging;
 using Polly;
 using Polly.CircuitBreaker;
 using Polly.Retry;
@@ -15,6 +16,7 @@ public sealed class SyncOrchestrator
     private readonly SteamApiClient _client;
     private readonly GameRepository _repository;
     private readonly SyncOptions _options;
+    private readonly ILogger<SyncOrchestrator> _log;
     private readonly ResiliencePipeline _retry;
 
     /// <summary>
@@ -24,11 +26,16 @@ public sealed class SyncOrchestrator
     /// — the backoff shape (exponential, 4 attempts) stays identical either way.
     /// </summary>
     public SyncOrchestrator(
-        SteamApiClient client, GameRepository repository, SyncOptions options, TimeSpan? retryBaseDelay = null)
+        SteamApiClient client,
+        GameRepository repository,
+        SyncOptions options,
+        ILogger<SyncOrchestrator> log,
+        TimeSpan? retryBaseDelay = null)
     {
         _client = client;
         _repository = repository;
         _options = options;
+        _log = log;
 
         _retry = new ResiliencePipelineBuilder()
             .AddRetry(new RetryStrategyOptions
@@ -40,6 +47,15 @@ public sealed class SyncOrchestrator
                 MaxRetryAttempts = 4,
                 BackoffType = DelayBackoffType.Exponential,
                 Delay = retryBaseDelay ?? TimeSpan.FromSeconds(1),
+                OnRetry = arguments =>
+                {
+                    _log.LogWarning(
+                        arguments.Outcome.Exception,
+                        "retry {Attempt} in {Delay}ms",
+                        arguments.AttemptNumber, (long)arguments.RetryDelay.TotalMilliseconds);
+
+                    return default;
+                },
             })
             .AddCircuitBreaker(new CircuitBreakerStrategyOptions
             {
@@ -54,6 +70,20 @@ public sealed class SyncOrchestrator
                 MinimumThroughput = 5,
                 SamplingDuration = TimeSpan.FromSeconds(30),
                 BreakDuration = TimeSpan.FromSeconds(30),
+                OnOpened = arguments =>
+                {
+                    _log.LogError(
+                        "circuit opened for {Duration}ms after repeated transient failures",
+                        (long)arguments.BreakDuration.TotalMilliseconds);
+
+                    return default;
+                },
+                OnClosed = _ =>
+                {
+                    _log.LogInformation("circuit closed");
+
+                    return default;
+                },
             })
             .Build();
     }
@@ -73,6 +103,9 @@ public sealed class SyncOrchestrator
         var states = _repository.GetSyncStates();
 
         var plan = SyncPlanner.Plan(owned, states, DateTimeOffset.UtcNow, _options, force);
+        _log.LogInformation(
+            "plan: {Planned} of {Owned} owned games need work (force={Force})",
+            plan.Count, owned.Count, force);
 
         var names = owned.ToDictionary(g => g.AppId, g => g.Name);
         var completed = 0;
@@ -87,6 +120,7 @@ public sealed class SyncOrchestrator
                     await SyncGameAsync(steamId, item, token);
 
                     var done = Interlocked.Increment(ref completed);
+                    _log.LogDebug("progress {Done}/{Total}", done, plan.Count);
                     progress?.Report(new SyncProgress(done, plan.Count, names.GetValueOrDefault(item.AppId, string.Empty)));
                 });
         }
@@ -119,6 +153,7 @@ public sealed class SyncOrchestrator
 
                 if (schema.Count == 0)
                 {
+                    _log.LogDebug("game {AppId} returned an empty schema", item.AppId);
                     _repository.MarkNoAchievements(item.AppId);
                     return;
                 }
@@ -144,15 +179,18 @@ public sealed class SyncOrchestrator
 
             // Written per game, which is what makes an interrupted sync resumable.
             _repository.MarkSynced(item.AppId, item.Playtime, now);
+            _log.LogDebug("game {AppId} synced", item.AppId);
         }
         catch (SteamApiException e) when (e.Kind == SteamApiErrorKind.NoStatsForApp)
         {
             // Expected for 30-40% of a library: soundtracks, demos, tools.
+            _log.LogDebug("game {AppId} has no achievements", item.AppId);
             _repository.MarkNoAchievements(item.AppId);
         }
         catch (SteamApiException e) when (e.Kind != SteamApiErrorKind.InvalidKey)
         {
             // One bad game must not abort the whole sync; an invalid key must.
+            _log.LogWarning(e, "game {AppId} failed and was skipped", item.AppId);
             _repository.MarkError(item.AppId, e.Message);
         }
     }

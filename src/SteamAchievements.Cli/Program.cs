@@ -65,7 +65,13 @@ using var http = new HttpClient(outermostHandler)
 };
 
 var client = new SteamApiClient(http, apiKey);
-var orchestrator = new SyncOrchestrator(client, repository, SyncOptions.Default);
+
+// A real logger factory arrives with the rest of the CLI's diagnostics wiring;
+// until then, a null logger keeps this compiling without silently becoming the
+// production default (the constructor parameter itself is still required).
+var orchestrator = new SyncOrchestrator(
+    client, repository, SyncOptions.Default,
+    Microsoft.Extensions.Logging.Abstractions.NullLogger<SyncOrchestrator>.Instance);
 
 using var cts = new CancellationTokenSource();
 Console.CancelKeyPress += (_, e) =>

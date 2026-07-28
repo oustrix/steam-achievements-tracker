@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging;
 using SteamAchievements.Core.Abstractions;
 using SteamAchievements.Core.Data;
 using SteamAchievements.Core.Steam;
@@ -15,19 +16,38 @@ public sealed class LiveSyncRunner : ISyncRunner
     private readonly ISecretStore _secrets;
     private readonly GameRepository _repository;
     private readonly Func<string, SteamApiClient> _clientFactory;
+    private readonly ILoggerFactory _loggers;
+    private readonly ILogger<LiveSyncRunner> _log;
 
+    /// <param name="loggers">
+    /// A factory rather than a logger: this class builds a
+    /// <see cref="SyncOrchestrator"/> per run, and that orchestrator needs its
+    /// own category rather than logging under this one.
+    /// </param>
     public LiveSyncRunner(
-        ISecretStore secrets, GameRepository repository, Func<string, SteamApiClient> clientFactory)
+        ISecretStore secrets,
+        GameRepository repository,
+        Func<string, SteamApiClient> clientFactory,
+        ILoggerFactory loggers)
     {
         _secrets = secrets;
         _repository = repository;
         _clientFactory = clientFactory;
+        _loggers = loggers;
+        _log = loggers.CreateLogger<LiveSyncRunner>();
     }
 
     public async Task RunAsync(
         ulong steamId, bool force, IProgress<SyncProgress>? progress, CancellationToken cancellationToken)
     {
         var key = _secrets.Read();
+
+        // The length, never the value. This is the only place that touches the
+        // key at all, and "no key" and "a key of the wrong length" are
+        // different first-run failures.
+        _log.LogInformation(
+            "stored key: {State}",
+            string.IsNullOrEmpty(key) ? "none" : $"present, {key.Length} characters");
 
         if (string.IsNullOrEmpty(key))
         {
@@ -38,7 +58,9 @@ public sealed class LiveSyncRunner : ISyncRunner
                 SteamApiErrorKind.InvalidKey, 0, "No Steam API key is stored. Add one in settings.");
         }
 
-        var orchestrator = new SyncOrchestrator(_clientFactory(key), _repository, SyncOptions.Default);
+        var orchestrator = new SyncOrchestrator(
+            _clientFactory(key), _repository, SyncOptions.Default,
+            _loggers.CreateLogger<SyncOrchestrator>());
 
         await orchestrator.RunAsync(steamId, force, progress, cancellationToken);
     }

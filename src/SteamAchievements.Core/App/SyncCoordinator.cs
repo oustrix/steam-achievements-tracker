@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging;
 using SteamAchievements.Core.Data;
 using SteamAchievements.Core.Presentation;
 using SteamAchievements.Core.Steam;
@@ -33,6 +34,7 @@ public sealed class SyncCoordinator : ISyncPresenter, ISyncController, IDisposab
     private readonly IAccountStore _accounts;
     private readonly SyncJournal _journal;
     private readonly Func<DateTimeOffset> _now;
+    private readonly ILogger<SyncCoordinator> _log;
     private readonly Lock _gate = new();
 
     private CancellationTokenSource? _cancellation;
@@ -46,12 +48,17 @@ public sealed class SyncCoordinator : ISyncPresenter, ISyncController, IDisposab
     private Task _completion = Task.CompletedTask;
 
     public SyncCoordinator(
-        ISyncRunner runner, IAccountStore accounts, SyncJournal journal, Func<DateTimeOffset> now)
+        ISyncRunner runner,
+        IAccountStore accounts,
+        SyncJournal journal,
+        Func<DateTimeOffset> now,
+        ILogger<SyncCoordinator> log)
     {
         _runner = runner;
         _accounts = accounts;
         _journal = journal;
         _now = now;
+        _log = log;
 
         // A key rejected during an earlier session is still rejected now. The
         // flag is persisted precisely so a restart does not hide it and spend
@@ -59,6 +66,13 @@ public sealed class SyncCoordinator : ISyncPresenter, ISyncController, IDisposab
         _status = _accounts.KeyRejectedAt is not null
             ? SyncStatusView.Idle with { Problem = SyncProblem.InvalidKey }
             : SyncStatusView.Idle;
+
+        if (_accounts.KeyRejectedAt is not null)
+        {
+            _log.LogWarning(
+                "starting with a key Steam rejected at {RejectedAt}; syncing is blocked until it is replaced",
+                _accounts.KeyRejectedAt);
+        }
     }
 
     public SyncStatusView Status
@@ -104,6 +118,7 @@ public sealed class SyncCoordinator : ISyncPresenter, ISyncController, IDisposab
                 AlertTitle = "No Steam account is configured",
                 AlertBody = "Finish onboarding before syncing.",
             });
+            _log.LogWarning("sync requested with no Steam account configured");
             return;
         }
 
@@ -117,6 +132,8 @@ public sealed class SyncCoordinator : ISyncPresenter, ISyncController, IDisposab
             _pausing = false;
             _cancellation = new CancellationTokenSource();
             _status = SyncStatusView.Idle with { Phase = SyncPhase.Running };
+            _log.LogInformation(
+                "sync started steam_id={SteamId} force={Force}", account.SteamId64, force);
             _completion = RunAsync(account.SteamId64, force, _cancellation.Token);
         }
 
@@ -138,6 +155,7 @@ public sealed class SyncCoordinator : ISyncPresenter, ISyncController, IDisposab
 
             _pausing = pausing;
             _cancellation?.Cancel();
+            _log.LogInformation("sync {Action} requested", pausing ? "pause" : "cancel");
         }
     }
 
@@ -170,12 +188,18 @@ public sealed class SyncCoordinator : ISyncPresenter, ISyncController, IDisposab
             _accounts.ClearKeyRejected();
             Record(startedAt, finishedAt, kind, completed, error: null);
             _journal.MarkSyncCompleted(finishedAt);
+            _log.LogInformation(
+                "sync completed games={Completed} in {Elapsed}ms",
+                completed, (long)(finishedAt - startedAt).TotalMilliseconds);
 
             Publish(SyncStatusView.Idle);
         }
         catch (OperationCanceledException)
         {
             Record(startedAt, _now(), kind, completed, SyncRunView.CancelledMarker);
+            _log.LogInformation(
+                "sync {Outcome} after {Completed} of {Total} games",
+                _pausing ? "paused" : "cancelled", completed, total);
 
             // Paused keeps the figures on screen so it is clear where to resume
             // from; cancelled returns to a clean idle.
@@ -193,6 +217,7 @@ public sealed class SyncCoordinator : ISyncPresenter, ISyncController, IDisposab
             var finishedAt = _now();
             _accounts.MarkKeyRejected(finishedAt);
             Record(startedAt, finishedAt, kind, completed, e.Message);
+            _log.LogError(e, "sync stopped: Steam rejected the API key");
 
             // A rejected key is a blocking condition rather than a failed run:
             // retrying changes nothing until the key is replaced, and the screen
@@ -207,6 +232,7 @@ public sealed class SyncCoordinator : ISyncPresenter, ISyncController, IDisposab
         catch (Exception e)
         {
             Record(startedAt, _now(), kind, completed, e.Message);
+            _log.LogError(e, "sync failed after {Completed} of {Total} games", completed, total);
 
             Publish(SyncStatusView.Idle with
             {
@@ -248,9 +274,14 @@ public sealed class SyncCoordinator : ISyncPresenter, ISyncController, IDisposab
     {
         Cancel();
 
-        // Bounded rather than indefinite: shutdown must not hang on a sync that
-        // refuses to notice its cancellation.
-        Completion.Wait(TimeSpan.FromSeconds(5));
+        if (!Completion.Wait(TimeSpan.FromSeconds(5)))
+        {
+            // Shutdown must not hang on a sync that refuses to notice its
+            // cancellation — but a timeout here means the orchestrator's
+            // workers are still live when the host closes the connections
+            // they write through, which is worth knowing about afterwards.
+            _log.LogError("shutdown timed out waiting five seconds for the sync to stop");
+        }
 
         lock (_gate)
         {
