@@ -2635,7 +2635,7 @@ public static class WebView2Probe
         }
         catch (WebView2RuntimeNotFoundException)
         {
-            return false ? null : null;
+            return null;
         }
     }
 
@@ -2643,7 +2643,7 @@ public static class WebView2Probe
 }
 ```
 
-Correct the obviously wrong `return false ? null : null;` to `return null;` when writing the file — it is written here only to make sure the line is read rather than pasted.
+`IsRuntimeInstalled` keeps its name and meaning, so `MainWindow` and `HostStartupDecision` need no change.
 
 - [ ] **Step 3: Build the logger factory and install the hooks in `App.OnStartup`**
 
