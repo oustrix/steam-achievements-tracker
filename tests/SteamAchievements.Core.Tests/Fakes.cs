@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging;
 using SteamAchievements.Core.Abstractions;
 using SteamAchievements.Core.Data;
 using SteamAchievements.Core.Presentation;
@@ -114,4 +115,65 @@ public sealed class FakeAccountAdmin : IAccountAdmin
     }
 
     public void Raise() => Changed?.Invoke();
+}
+
+/// <summary>
+/// Captures what a component logged, so a test can assert that a branch which
+/// otherwise leaves no trace — a swallowed exception, a cancelled run — said so.
+///
+/// The list is guarded because SyncOrchestrator logs from four worker threads
+/// and an unsynchronized List would drop entries under exactly the load these
+/// tests exist to cover.
+/// </summary>
+public sealed class RecordingLogger<T> : ILogger<T>
+{
+    private readonly Lock _gate = new();
+    private readonly List<string> _lines = [];
+    private readonly List<Exception?> _errors = [];
+
+    public IReadOnlyList<string> Lines
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return _lines.ToArray();
+            }
+        }
+    }
+
+    public IReadOnlyList<Exception?> Errors
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return _errors.ToArray();
+            }
+        }
+    }
+
+    public bool Logged(string fragment) => Lines.Any(line => line.Contains(fragment, StringComparison.Ordinal));
+
+    public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+
+    public bool IsEnabled(LogLevel logLevel) => true;
+
+    public void Log<TState>(
+        LogLevel logLevel,
+        EventId eventId,
+        TState state,
+        Exception? exception,
+        Func<TState, Exception?, string> formatter)
+    {
+        lock (_gate)
+        {
+            _lines.Add(formatter(state, exception));
+
+            if (exception is not null)
+            {
+                _errors.Add(exception);
+            }
+        }
+    }
 }
