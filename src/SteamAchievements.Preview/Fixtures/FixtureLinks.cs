@@ -19,6 +19,8 @@ public sealed class FixtureLinks : IExternalLinks
 
     public void OpenDataFolder() => OpenUrl("(the data folder)");
 
+    public void OpenLogFile() => OpenUrl("(the log file)");
+
     public void OpenUrl(string url)
     {
         LastUrl = url;

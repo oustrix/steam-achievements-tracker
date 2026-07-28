@@ -10,6 +10,7 @@
 @inject ISyncPresenter SyncStatus
 @inject ISyncController Sync
 @inject LibraryChangeSignal LibraryChanged
+@inject IExternalLinks Links
 
 <PageTitle>Settings</PageTitle>
 
@@ -140,6 +141,22 @@
 
     <div class="block">
         <div class="label">Local data</div>
+        @* Two buttons rather than one. IExternalLinks.OpenDataFolder had no
+           caller anywhere in the application — it was written for a button
+           nobody built — so adding "Open log" beside a button that does not
+           exist would have left that gap in place. *@
+        <div class="files">
+            <button class="secondary" type="button" @onclick="() => Links.OpenDataFolder()">
+                Open data folder
+            </button>
+            <button class="secondary" type="button" @onclick="() => Links.OpenLogFile()">
+                Open log
+            </button>
+        </div>
+        <div class="hint">
+            The log records what the application did, with the API key removed. Attach it
+            when reporting a problem.
+        </div>
         @if (_pending == Pending.Reset)
         {
             <Notice Severity="NoticeSeverity.Danger" Title="Reset database">

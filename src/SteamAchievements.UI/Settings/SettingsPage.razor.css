@@ -37,6 +37,8 @@
 
 .key-row { display: flex; gap: 9px; align-items: center; flex-wrap: wrap; }
 
+.files { display: flex; gap: 10px; flex-wrap: wrap; }
+
 .key {
     flex: 1;
     min-width: 240px;

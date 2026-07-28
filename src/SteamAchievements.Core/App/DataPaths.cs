@@ -11,11 +11,12 @@ namespace SteamAchievements.Core.App;
 /// stored under: two Windows users get two databases and two keys instead of a
 /// shared library nobody but its owner can sync.
 /// </summary>
-public sealed record DataPaths(string Folder, string DatabaseFile, string SecretFile)
+public sealed record DataPaths(string Folder, string DatabaseFile, string SecretFile, string LogFile)
 {
     public const string FolderName = "SteamAchievementsTracker";
     public const string DatabaseFileName = "library.db";
     public const string SecretFileName = "apikey.bin";
+    public const string LogFileName = "log.txt";
 
     public static DataPaths Resolve(string baseDirectory)
     {
@@ -29,7 +30,8 @@ public sealed record DataPaths(string Folder, string DatabaseFile, string Secret
         return new DataPaths(
             folder,
             Path.Combine(folder, DatabaseFileName),
-            Path.Combine(folder, SecretFileName));
+            Path.Combine(folder, SecretFileName),
+            Path.Combine(folder, LogFileName));
     }
 
     /// <summary>
