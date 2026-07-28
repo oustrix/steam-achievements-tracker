@@ -27,11 +27,16 @@ public static partial class Redaction
     private static partial Regex QueryParameter();
 
     /// <summary>
-    /// The shape of a Steam Web API key: exactly 32 uppercase hex characters,
-    /// standing alone. Achievement icon URLs carry 40-character lowercase
-    /// SHA-1 hashes, which this deliberately does not match.
+    /// The shape of a Steam Web API key: exactly 32 hex characters, standing
+    /// alone, in either case. Achievement icon URLs carry 40-character SHA-1
+    /// hashes, which this deliberately does not match — the discriminator is
+    /// length, not case. Case has to be accepted both ways because
+    /// <c>SteamAchievements.Cli</c> reads the key from <c>--key</c> or
+    /// <c>STEAM_API_KEY</c> without normalising it (only the onboarding path
+    /// calls <c>ApiKey.TryNormalize</c>), so a key a user typed in lowercase
+    /// is just as real a credential as one Steam issued in uppercase.
     /// </summary>
-    [GeneratedRegex(@"(?<![0-9A-Za-z])[0-9A-F]{32}(?![0-9A-Za-z])")]
+    [GeneratedRegex(@"(?<![0-9A-Za-z])[0-9A-Fa-f]{32}(?![0-9A-Za-z])")]
     private static partial Regex ApiKeyShaped();
 
     public static string Scrub(string text)

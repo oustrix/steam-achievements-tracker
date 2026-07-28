@@ -46,10 +46,25 @@ public class RedactionTests
     }
 
     [Fact]
+    public void StripsABareTokenShapedLikeAnApiKeyInLowercase()
+    {
+        // The CLI reads the key from --key/STEAM_API_KEY without normalising
+        // its case (ApiKey.TryNormalize only runs in the onboarding path), so
+        // a key typed in lowercase is a real credential that must be caught
+        // too, not just the uppercase form Steam issues.
+        Assert.Equal(
+            "Steam rejected ***",
+            Redaction.Scrub("Steam rejected abcdef0123456789abcdef0123456789"));
+    }
+
+    [Fact]
     public void LeavesAFortyCharacterLowercaseHashAlone()
     {
         // Achievement icon URLs carry SHA-1 hashes. Scrubbing those would empty
-        // the log of the URLs it exists to record.
+        // the log of the URLs it exists to record. This is now the test that
+        // proves length — not case — is what protects icon URLs: the mask
+        // regex accepts lowercase hex, and only rejects this string because
+        // it is 40 characters long rather than 32.
         const string icon = "https://media.steampowered.com/a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4.jpg";
 
         Assert.Equal(icon, Redaction.Scrub(icon));
