@@ -197,7 +197,7 @@ public partial class App : Application
 
         _log!.LogInformation(
             "three connections open and the schema migrated in {Elapsed}ms",
-            (long)Stopwatch.GetElapsedTime(openingConnections).TotalMilliseconds);
+            Elapsed.Since(openingConnections));
 
         var secrets = new DpapiSecretStore(paths.SecretFile);
         var accounts = new SqliteAccountStore(settings);

@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging;
+using SteamAchievements.Core.Diagnostics;
 
 namespace SteamAchievements.Core.Data;
 
@@ -41,8 +42,7 @@ public sealed class SqliteLibraryReset : ILibraryReset
     {
         var started = Stopwatch.GetTimestamp();
         Database.EmptyLibrary(_connection);
-        _log.LogInformation(
-            "library emptied in {Elapsed}ms", (long)Stopwatch.GetElapsedTime(started).TotalMilliseconds);
+        _log.LogInformation("library emptied in {Elapsed}ms", Elapsed.Since(started));
 
         // VACUUM cannot run inside a transaction, so it is deliberately
         // separate from EmptyLibrary above and timed on its own — this is the
@@ -50,8 +50,6 @@ public sealed class SqliteLibraryReset : ILibraryReset
         // WAL database has never been observed.
         var vacuumStarted = Stopwatch.GetTimestamp();
         Database.Vacuum(_connection);
-        _log.LogInformation(
-            "vacuum finished in {Elapsed}ms",
-            (long)Stopwatch.GetElapsedTime(vacuumStarted).TotalMilliseconds);
+        _log.LogInformation("vacuum finished in {Elapsed}ms", Elapsed.Since(vacuumStarted));
     }
 }

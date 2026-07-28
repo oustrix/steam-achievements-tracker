@@ -43,7 +43,7 @@ public sealed class LoggingHandler : DelegatingHandler
             // taxonomy in SteamApiClient decides what it means.
             _log.LogDebug(
                 "{Method} {Url} -> {Status} in {Elapsed}ms",
-                request.Method.Method, url, (int)response.StatusCode, Elapsed(started));
+                request.Method.Method, url, (int)response.StatusCode, Elapsed.Since(started));
 
             return response;
         }
@@ -89,17 +89,14 @@ public sealed class LoggingHandler : DelegatingHandler
             // what is happening, even if the two causes end up indistinguishable
             // here.
             _log.LogDebug(
-                "{Method} {Url} -> cancelled after {Elapsed}ms", request.Method.Method, url, Elapsed(started));
+                "{Method} {Url} -> cancelled after {Elapsed}ms", request.Method.Method, url, Elapsed.Since(started));
             throw;
         }
         catch (Exception e)
         {
             _log.LogError(
-                e, "{Method} {Url} -> failed after {Elapsed}ms", request.Method.Method, url, Elapsed(started));
+                e, "{Method} {Url} -> failed after {Elapsed}ms", request.Method.Method, url, Elapsed.Since(started));
             throw;
         }
     }
-
-    private static long Elapsed(long started) =>
-        (long)Stopwatch.GetElapsedTime(started).TotalMilliseconds;
 }
