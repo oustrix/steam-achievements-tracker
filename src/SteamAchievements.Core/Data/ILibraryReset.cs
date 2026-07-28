@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging;
 
@@ -30,5 +31,27 @@ public sealed class SqliteLibraryReset : ILibraryReset
         _log = log;
     }
 
-    public void Reset() => Database.ResetLibrary(_connection, _log);
+    /// <summary>
+    /// Empties the library, then reclaims the space — timed separately, not as
+    /// one number. "The reset took forty seconds" and "the VACUUM took
+    /// thirty-nine of them" are different findings, and this is the one method
+    /// with a logger of its own to tell them apart with.
+    /// </summary>
+    public void Reset()
+    {
+        var started = Stopwatch.GetTimestamp();
+        Database.EmptyLibrary(_connection);
+        _log.LogInformation(
+            "library emptied in {Elapsed}ms", (long)Stopwatch.GetElapsedTime(started).TotalMilliseconds);
+
+        // VACUUM cannot run inside a transaction, so it is deliberately
+        // separate from EmptyLibrary above and timed on its own — this is the
+        // one statement whose behaviour with three live connections against a
+        // WAL database has never been observed.
+        var vacuumStarted = Stopwatch.GetTimestamp();
+        Database.Vacuum(_connection);
+        _log.LogInformation(
+            "vacuum finished in {Elapsed}ms",
+            (long)Stopwatch.GetElapsedTime(vacuumStarted).TotalMilliseconds);
+    }
 }
