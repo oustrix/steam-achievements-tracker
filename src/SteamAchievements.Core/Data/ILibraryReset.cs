@@ -1,4 +1,5 @@
 using Microsoft.Data.Sqlite;
+using Microsoft.Extensions.Logging;
 
 namespace SteamAchievements.Core.Data;
 
@@ -20,9 +21,14 @@ public interface ILibraryReset
 public sealed class SqliteLibraryReset : ILibraryReset
 {
     private readonly SqliteConnection _connection;
+    private readonly ILogger<SqliteLibraryReset> _log;
 
     /// <param name="connection">Must be writable and carry a busy timeout — see <see cref="Database.OpenSettings"/>.</param>
-    public SqliteLibraryReset(SqliteConnection connection) => _connection = connection;
+    public SqliteLibraryReset(SqliteConnection connection, ILogger<SqliteLibraryReset> log)
+    {
+        _connection = connection;
+        _log = log;
+    }
 
-    public void Reset() => Database.ResetLibrary(_connection);
+    public void Reset() => Database.ResetLibrary(_connection, _log);
 }

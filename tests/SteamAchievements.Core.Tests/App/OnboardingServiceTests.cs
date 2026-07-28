@@ -1,4 +1,5 @@
 using System.Net;
+using Microsoft.Extensions.Logging.Abstractions;
 using SteamAchievements.Core.App;
 using SteamAchievements.Core.Data;
 using SteamAchievements.Core.Presentation;
@@ -41,7 +42,9 @@ public class OnboardingServiceTests
             new(new HttpClient(keyCheck) { BaseAddress = new Uri("https://api.steampowered.com/") }, key);
 
         return (
-            new OnboardingService(accounts, secrets, new SteamAccountLocator(new FixedSteamPath(null)), community, ClientFor),
+            new OnboardingService(
+                accounts, secrets, new SteamAccountLocator(new FixedSteamPath(null)), community, ClientFor,
+                NullLogger<OnboardingService>.Instance),
             secrets, accounts, connection);
     }
 

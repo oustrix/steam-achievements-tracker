@@ -1,5 +1,7 @@
+using System.Diagnostics;
 using Dapper;
 using Microsoft.Data.Sqlite;
+using Microsoft.Extensions.Logging;
 
 namespace SteamAchievements.Core.Data;
 
@@ -191,8 +193,10 @@ public static class Database
     /// account's data, and losing it on "switch account" is a surprise beyond
     /// what the confirmation promised.
     /// </summary>
-    public static void ResetLibrary(SqliteConnection connection)
+    public static void ResetLibrary(SqliteConnection connection, ILogger log)
     {
+        var started = Stopwatch.GetTimestamp();
+
         using (var transaction = connection.BeginTransaction())
         {
             connection.Execute("""
@@ -217,10 +221,21 @@ public static class Database
             transaction.Commit();
         }
 
+        log.LogInformation(
+            "library emptied in {Elapsed}ms", (long)Stopwatch.GetElapsedTime(started).TotalMilliseconds);
+
         // VACUUM cannot run inside a transaction, so it is deliberately outside
         // the block above. Without it the file keeps the space the deleted rows
         // occupied, which for a 1500-game library is most of it.
+        //
+        // Timed on its own because this is the one statement whose behaviour
+        // with three live connections against a WAL database has never been
+        // observed.
+        var vacuumStarted = Stopwatch.GetTimestamp();
         connection.Execute("VACUUM");
+        log.LogInformation(
+            "vacuum finished in {Elapsed}ms",
+            (long)Stopwatch.GetElapsedTime(vacuumStarted).TotalMilliseconds);
     }
 
     /// <summary>

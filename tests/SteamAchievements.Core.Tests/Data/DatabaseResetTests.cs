@@ -1,5 +1,6 @@
 using Dapper;
 using Microsoft.Data.Sqlite;
+using Microsoft.Extensions.Logging.Abstractions;
 using SteamAchievements.Core.Data;
 using SteamAchievements.Core.Steam;
 
@@ -34,7 +35,7 @@ public class DatabaseResetTests
     {
         using var connection = Populated();
 
-        Database.ResetLibrary(connection);
+        Database.ResetLibrary(connection, NullLogger.Instance);
 
         foreach (var table in new[]
                  {
@@ -51,7 +52,7 @@ public class DatabaseResetTests
     {
         using var connection = Populated();
 
-        Database.ResetLibrary(connection);
+        Database.ResetLibrary(connection, NullLogger.Instance);
 
         Assert.Null(new SqliteAccountStore(connection).Current);
     }
@@ -61,7 +62,7 @@ public class DatabaseResetTests
     {
         using var connection = Populated();
 
-        Database.ResetLibrary(connection);
+        Database.ResetLibrary(connection, NullLogger.Instance);
 
         Assert.Equal("#c98f7a", new SqliteUserPreferences(connection).Accent);
     }
@@ -72,7 +73,7 @@ public class DatabaseResetTests
         using var connection = Populated();
         new SqliteAccountStore(connection).MarkKeyRejected(DateTimeOffset.UtcNow);
 
-        Database.ResetLibrary(connection);
+        Database.ResetLibrary(connection, NullLogger.Instance);
 
         Assert.Null(new SqliteAccountStore(connection).KeyRejectedAt);
     }
@@ -82,7 +83,7 @@ public class DatabaseResetTests
     {
         using var connection = Populated();
 
-        Database.ResetLibrary(connection);
+        Database.ResetLibrary(connection, NullLogger.Instance);
         new GameRepository(connection).UpsertOwnedGames(
             [new OwnedGame(440, "Team Fortress 2", "hash", 10, 0, null)]);
 
@@ -94,9 +95,25 @@ public class DatabaseResetTests
     {
         using var connection = Populated();
 
-        Database.ResetLibrary(connection);
-        Database.ResetLibrary(connection);
+        Database.ResetLibrary(connection, NullLogger.Instance);
+        Database.ResetLibrary(connection, NullLogger.Instance);
 
         Assert.Equal(0, connection.QuerySingle<long>("SELECT COUNT(*) FROM games"));
+    }
+
+    [Fact]
+    public void TimesTheVacuumSeparatelyFromTheDeletions()
+    {
+        // VACUUM against a file with three live connections is the specific
+        // untested behaviour on the Windows first-run checklist. "The reset
+        // took forty seconds" and "the VACUUM took thirty-nine of them" are
+        // different findings, so they are different lines.
+        using var connection = Populated();
+        var log = new RecordingLogger<SqliteLibraryReset>();
+
+        Database.ResetLibrary(connection, log);
+
+        Assert.True(log.Logged("library emptied"));
+        Assert.True(log.Logged("vacuum finished"));
     }
 }
