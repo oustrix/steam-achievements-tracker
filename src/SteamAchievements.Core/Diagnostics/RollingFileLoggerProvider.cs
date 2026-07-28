@@ -16,6 +16,22 @@ public sealed class RollingFileLoggerProvider : ILoggerProvider
     private readonly RollingFileWriter _writer;
     private readonly Func<DateTimeOffset> _now;
 
+    /// <summary>
+    /// Latched, never cleared, once <see cref="Dispose"/> runs. A hosted
+    /// <c>ILoggerFactory</c> disposing its providers while another component
+    /// still holds an injected <c>ILogger&lt;T&gt;</c> and logs from its own
+    /// teardown is an ordinary .NET shutdown path — in this application,
+    /// <c>App.OnExit</c> disposes the service provider (which disposes
+    /// <c>SyncCoordinator</c>, which logs) before it disposes the logger
+    /// factory. Without this flag, <see cref="RollingFileWriter.Write"/> would
+    /// see its stream is <see langword="null"/> and transparently reopen the
+    /// file, resurrecting a log the process believes it has already closed and
+    /// leaving a stray handle open after shutdown. A line lost after shutdown
+    /// has begun is the correct trade — the file must stay closed once
+    /// closing has started.
+    /// </summary>
+    private volatile bool _disposed;
+
     /// <param name="now">
     /// Injected rather than read ambiently, which is the convention everywhere
     /// else in Core and is what lets the formatting tests assert exact output.
@@ -32,11 +48,28 @@ public sealed class RollingFileLoggerProvider : ILoggerProvider
     /// Redaction happens here, on the whole formatted line including the
     /// exception block, rather than at the call sites — a scrubber you have to
     /// remember to call is a scrubber that leaks.
+    ///
+    /// A no-op once disposed, silently, for the same reason
+    /// <see cref="RollingFileWriter"/> disables itself silently on an I/O
+    /// error: logging must never be the reason something fails, and a caller
+    /// logging from its own teardown after the provider is gone should not be
+    /// punished for it.
     /// </summary>
-    private void Write(LogLevel level, string category, string message, Exception? error) =>
-        _writer.Write(Redaction.Scrub(LogLine.Format(_now(), level, category, message, error)));
+    private void Write(LogLevel level, string category, string message, Exception? error)
+    {
+        if (_disposed)
+        {
+            return;
+        }
 
-    public void Dispose() => _writer.Dispose();
+        _writer.Write(Redaction.Scrub(LogLine.Format(_now(), level, category, message, error)));
+    }
+
+    public void Dispose()
+    {
+        _disposed = true;
+        _writer.Dispose();
+    }
 
     private sealed class FileLogger : ILogger
     {
@@ -64,6 +97,8 @@ public sealed class RollingFileLoggerProvider : ILoggerProvider
             Exception? exception,
             Func<TState, Exception?, string> formatter)
         {
+            ArgumentNullException.ThrowIfNull(formatter);
+
             if (!IsEnabled(logLevel))
             {
                 return;

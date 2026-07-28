@@ -86,6 +86,7 @@ public class RollingFileLoggerProviderTests : IDisposable
             "request failed");
 
         Assert.DoesNotContain("ABCDEF0123456789ABCDEF0123456789", Text);
+        Assert.Contains("key=***", Text);
     }
 
     [Fact]
@@ -111,5 +112,36 @@ public class RollingFileLoggerProviderTests : IDisposable
 
         Assert.Contains("A  from a", Text);
         Assert.Contains("B  from b", Text);
+    }
+
+    [Fact]
+    public void StaysClosedForALoggerHeldPastDisposal()
+    {
+        // A hosted ILoggerFactory disposing its providers while another
+        // component still holds an injected ILogger<T> and logs from its own
+        // teardown is an ordinary .NET shutdown path — in this application,
+        // App.OnExit disposes the service provider (which disposes
+        // SyncCoordinator, which logs) before it disposes the logger factory.
+        var provider = NewProvider();
+        var log = provider.CreateLogger("X");
+
+        log.LogInformation("before shutdown");
+        provider.Dispose();
+        log.LogInformation("after shutdown");
+
+        Assert.Equal(
+            "2026-07-27 09:14:02.113Z  INF  X  before shutdown\r\n",
+            Text);
+    }
+
+    [Fact]
+    public void ReturnsALoggerThatWritesNothingAfterTheProviderIsDisposed()
+    {
+        var provider = NewProvider();
+        provider.Dispose();
+
+        provider.CreateLogger("X").LogInformation("too late");
+
+        Assert.False(File.Exists(Path.Combine(_directory, "log.txt")));
     }
 }
