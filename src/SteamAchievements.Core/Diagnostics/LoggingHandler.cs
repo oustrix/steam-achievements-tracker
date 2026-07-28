@@ -40,6 +40,20 @@ public sealed class LoggingHandler : DelegatingHandler
 
             return response;
         }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            // SyncCoordinator.Pause cancels the run's token, and
+            // SyncOrchestrator drives several requests concurrently, so one
+            // deliberate pause would otherwise write a burst of ERR lines --
+            // indistinguishable from several real transport failures in the
+            // one artifact meant to make the first real failure obvious. A
+            // cancelled request is neither a status Steam returned nor a
+            // transport failure, so it gets its own line at the same level
+            // as success.
+            _log.LogDebug(
+                "{Method} {Url} -> cancelled after {Elapsed}ms", request.Method.Method, url, Elapsed(started));
+            throw;
+        }
         catch (Exception e)
         {
             _log.LogError(

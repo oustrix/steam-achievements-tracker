@@ -32,6 +32,11 @@ public class LoggingHandlerTests : IDisposable
     private static HttpClient ClientOver(ILogger<LoggingHandler> log, Func<HttpResponseMessage> respond) =>
         new(new LoggingHandler(log) { InnerHandler = new StubHandler(respond) });
 
+    private static string FindLine(string path, string containing) =>
+        Assert.Single(
+            File.ReadAllText(path).Split("\r\n", StringSplitOptions.RemoveEmptyEntries),
+            line => line.Contains(containing));
+
     [Fact]
     public async Task LogsTheMethodTheUrlAndTheStatus()
     {
@@ -81,7 +86,48 @@ public class LoggingHandlerTests : IDisposable
 
         provider.Dispose();
 
-        Assert.Contains("401", File.ReadAllText(Path.Combine(_directory, "log.txt")));
+        // A bare Contains("401") would still pass if a regression routed
+        // non-success statuses through LogError -- "401" appears in the
+        // message either way. LogLine.Format separates its fields with
+        // exactly two spaces ("...Z  " + level + "  " + category + "  " +
+        // message), so the level abbreviation is asserted precisely rather
+        // than as a substring that could appear anywhere else in the line.
+        var line = FindLine(Path.Combine(_directory, "log.txt"), "401");
+
+        Assert.Contains("  DBG  ", line);
+        Assert.DoesNotContain("  ERR  ", line);
+    }
+
+    [Fact]
+    public async Task LogsACancelledRequestAtDebugAndStillPropagatesIt()
+    {
+        var provider = new RollingFileLoggerProvider(
+            new LogFileOptions(_directory), () => DateTimeOffset.UnixEpoch);
+        var log = new LoggerFactory([provider]).CreateLogger<LoggingHandler>();
+
+        using var client = ClientOver(log, () => throw new OperationCanceledException("stopped"));
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+
+        // ThrowsAnyAsync, not ThrowsAsync: HttpClient itself rewraps a
+        // cancelled request into a TaskCanceledException before it reaches
+        // the caller, regardless of what LoggingHandler rethrows -- verified
+        // by observation, not assumed. TaskCanceledException derives from
+        // OperationCanceledException, and that is the contract this test
+        // cares about: the exception still propagates, whatever its exact
+        // runtime type.
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            () => client.GetAsync("https://api.steampowered.com/x", cts.Token));
+
+        provider.Dispose();
+
+        // Same shape check as the failing-status test: the cancelled line
+        // must carry the DBG marker, not ERR, and the exception must still
+        // reach the caller -- a pause is not swallowed, only not misreported.
+        var line = FindLine(Path.Combine(_directory, "log.txt"), "https://api.steampowered.com/x");
+
+        Assert.Contains("  DBG  ", line);
+        Assert.DoesNotContain("  ERR  ", line);
     }
 
     [Fact]
