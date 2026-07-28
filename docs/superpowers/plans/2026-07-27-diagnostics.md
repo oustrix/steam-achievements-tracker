@@ -177,11 +177,15 @@ public static partial class Redaction
     private static partial Regex QueryParameter();
 
     /// <summary>
-    /// The shape of a Steam Web API key: exactly 32 uppercase hex characters,
-    /// standing alone. Achievement icon URLs carry 40-character lowercase
-    /// SHA-1 hashes, which this deliberately does not match.
+    /// The shape of a Steam Web API key: exactly 32 hex characters standing
+    /// alone, in either case. Achievement icon URLs carry SHA-1 hashes, which
+    /// this does not match because they are 40 characters long — length is
+    /// what separates them, not case. Both cases are matched because ApiKey
+    /// normalises case only during onboarding: a key handed to the CLI through
+    /// --key or STEAM_API_KEY keeps whatever the user typed, and a leaked
+    /// lowercase key is just as leaked.
     /// </summary>
-    [GeneratedRegex(@"(?<![0-9A-Za-z])[0-9A-F]{32}(?![0-9A-Za-z])")]
+    [GeneratedRegex(@"(?<![0-9A-Za-z])[0-9A-Fa-f]{32}(?![0-9A-Za-z])")]
     private static partial Regex ApiKeyShaped();
 
     public static string Scrub(string text)
@@ -3075,9 +3079,10 @@ Add three entries to "Facts learned the hard way":
   messages carry those URLs, so a scrubber you have to remember to call is a
   scrubber that leaks. `Redaction.Scrub` runs inside
   `RollingFileLoggerProvider` on the whole formatted line, exception block
-  included, and also masks any bare 32-character uppercase hex token — the
-  shape of a Steam key. It deliberately does not match the 40-character
-  lowercase SHA-1 hashes in icon URLs.
+  included, and also masks any bare 32-character hex token in either case —
+  the shape of a Steam key. The 40-character SHA-1 hashes in icon URLs are
+  spared by their length, not by their case: `ApiKey` normalises case only
+  during onboarding, so a key given to the CLI keeps whatever the user typed.
 - **The log writer flushes on every write and never retries after a failure.**
   Buffering loses exactly the lines a crash makes valuable, and a writer that
   retried per line would turn a permissions problem into a nine-minute stall

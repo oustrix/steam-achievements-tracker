@@ -140,9 +140,18 @@ Two rules, both format-based, because the writer must not be handed the secret:
 1. `key=<value>` and `access_token=<value>` in a query string keep their
    parameter name and lose their value — `key=***`, `access_token=***` —
    matched case-insensitively and consumed up to the next `&` or whitespace.
-2. Any standalone run of exactly 32 characters from `[0-9A-F]` becomes `***`.
-   That is the shape of a Steam Web API key. Achievement icon URLs carry
-   40-character lowercase SHA-1 hashes, which this does not match.
+2. Any standalone run of exactly 32 hex characters, either case, becomes
+   `***`. That is the shape of a Steam Web API key. Achievement icon URLs
+   carry SHA-1 hashes, which this does not match — they are 40 characters
+   long, and **length is what separates them, not case.**
+
+   An earlier draft of this rule matched uppercase only, on the reasoning
+   that the SHA-1 hashes are lowercase. Review found the hole: `ApiKey`
+   normalises case only in the onboarding path, so a key given to
+   `SteamAchievements.Cli` through `--key` or `STEAM_API_KEY` keeps whatever
+   case the user typed. A lowercase key reaching a log line without its
+   `key=` prefix — the exact case rule 2 exists for — would have passed
+   through verbatim.
 
 Rule 2 is the safety net for a key that reaches the log without its `key=`
 prefix. It cannot be complete — no format rule can — so the call-site rule
